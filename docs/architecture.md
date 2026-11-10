@@ -25,6 +25,8 @@ Internet ──▶ Traefik ──▶ axum (:PORT) ── tronc::http::layers ─
 | `migrate`, `testdb` | `migrate`, `testdb` | sqlx migrations and per-binary test schemas |
 | `logger`, `journal` | `logger`, `Journal/sdk/journal` | JSON lines and Journal shipping |
 | `apiref` | `apiref` | `/docs` Scalar page, `/docs/openapi.json`, route drift check |
+| `mcp` | `mcp` | Stateless MCP endpoint, RFC 9728 metadata, gates, confirmations, paging helpers |
+| `mcptest` | `mcp/mcptest` | Conformance kit, rmcp test client, in-memory pending store |
 
 ## Request lifecycle
 

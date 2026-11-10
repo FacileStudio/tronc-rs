@@ -23,12 +23,14 @@ and SPA fallback, pinned by test vectors generated from Go `tronc`.
 - Logs JSON lines on stdout and, with `journal`, ships them to Journal
 - Serves the `utoipa` OpenAPI 3.1 document behind a Scalar page at `/docs`, and reports
   mounted routes the document forgot
+- Mounts a stateless remote MCP server on rmcp, with the RFC 9728 metadata, scope gates and
+  confirmations for sensitive tools, plus the `mcptest` conformance kit
 
 ## Stack
 
 | Layer | Tech |
 |---|---|
-| Runtime | Rust 1.98, edition 2024, axum 0.8, tower 0.5, tracing 0.1, utoipa 6 (`apiref`) |
+| Runtime | Rust 1.98, edition 2024, axum 0.8, tower 0.5, tracing 0.1, utoipa 6 (`apiref`), rmcp 3.9 (`mcp`) |
 | Storage | PostgreSQL 16 through sqlx 0.9 (features `health`, `migrate`, `testdb`) |
 
 ## Install
@@ -37,10 +39,10 @@ Pin a tag and pick features. Nothing is on by default.
 
 ```toml
 [dependencies]
-tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.2.0", features = ["http", "health", "spa", "migrate", "journal"] }
+tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.3.0", features = ["http", "health", "spa", "migrate", "journal"] }
 
 [dev-dependencies]
-tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.2.0", features = ["testdb"] }
+tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.3.0", features = ["testdb"] }
 ```
 
 | Feature | Modules |
@@ -53,6 +55,8 @@ tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.2.0", feat
 | `testdb` | `testdb` (pulls in `migrate`) |
 | `journal` | `journal`, and the Journal layer in `logger` |
 | `apiref` | `apiref`, the `/docs` reference (pulls in `http`) |
+| `mcp` | `mcp`, the remote MCP server and its Postgres pending store (pulls in `http`) |
+| `mcptest` | `mcptest`, the MCP conformance kit and an rmcp test client (pulls in `mcp`) |
 
 A minimal app, the shape of [`examples/minimal.rs`](examples/minimal.rs):
 

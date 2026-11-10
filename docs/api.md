@@ -115,7 +115,7 @@ pub struct Tls;                                            // request extension:
 pub struct RequestId(pub String);                          // extractor
 pub struct RemoteAddr(pub String);                         // extractor: resolved client address
 pub async fn not_found() -> Response;                      // Go's "404 page not found\n"
-pub fn plain(status: StatusCode, body: &'static str) -> Response;
+pub fn plain(status: StatusCode, body: impl Into<axum::body::Body>) -> Response;
 pub struct SecurityConfig { csp_enforce, csp_sources: Sources, csp_report_uri, allow: Vec<String>,
     cross_origin_opener_policy, hsts_exclude_subdomains, trusted: Option<Vec<IpNet>> }
 pub struct Security;  // new(&SecurityConfig, &[IpNet]) -> Result, apply, is_https
@@ -217,6 +217,126 @@ The drift test every app keeps:
 ```rust
 let missing = tronc::apiref::undocumented(&app, &doc, &config, &[]);
 assert!(missing.is_empty(), "routes missing from the API document: {missing:?}");
+```
+
+## `mcp` (`mcp`)
+
+A remote MCP server on rmcp 3.9's Streamable HTTP transport, stateless (spec 2026-07-28): no
+`Mcp-Session-Id`, any replica answers any request, `GET` and `DELETE` answer 405. Legacy
+clients (`initialize`, 2025-11-25 and older) are served statelessly too.
+
+```rust
+pub use rmcp;                                   // the SDK, for model types and schemars
+
+pub trait Verifier: Send + Sync + 'static {     // the app's auth kit implements it
+    fn verify<'a>(&'a self, token: &'a str, request: &'a http::request::Parts) -> VerifyFuture<'a>;
+}
+pub type VerifyFuture<'a> = Pin<Box<dyn Future<Output = Result<TokenInfo, VerifyError>> + Send + 'a>>;
+pub enum VerifyError { Invalid /* 401 */, Unavailable /* 500 */ }
+pub struct TokenInfo { pub user_id: String, pub scopes: Vec<String>,
+    pub expires_at: Option<SystemTime>, pub extra: HashMap<String, String> }
+pub const EXTRA_CLIENT_ID: &str = "client_id";  // porte mcpauth.ExtraClientID
+pub const EXTRA_ACTOR: &str = "actor";          // porte mcpauth.ExtraActor
+
+pub struct Options { name, title, version, instructions, resource, issuer, verifier: Arc<dyn Verifier>,
+    scopes: Scopes, rate_limit: http::RateLimitConfig, origins: Vec<String>, tools: Vec<Tool>,
+    list_ttl: Duration }                          // all pub
+impl Options { pub fn new(name, resource, issuer, verifier) -> Self }
+pub struct Scopes { pub read: String, pub write: String }   // empty: <name>.read, <name>.write
+pub const DEFAULT_LIST_TTL: Duration;           // 10 minutes
+pub struct Server;
+impl Server {
+    pub fn new(options: Options) -> Result<Self, String>;
+    pub fn router<S: Clone + Send + Sync + 'static>(&self) -> Router<S>;
+    pub fn metadata_url(&self) -> &str;
+}
+pub fn mount<S>(router: Router<S>, options: Options) -> Result<Router<S>, String>;
+
+pub struct ToolSpec { pub name: String, pub title: String, pub description: String,
+    pub annotations: Option<Annotations> }      // None is refused at boot
+pub struct Annotations { pub read_only: bool, pub destructive: bool, pub idempotent: bool, pub open_world: bool }
+pub fn tool<In, Out, F, Fut>(spec: ToolSpec, handler: F) -> Tool
+    where In: DeserializeOwned + JsonSchema, Out: Serialize + JsonSchema,
+          F: Fn(Call, In) -> Fut, Fut: Future<Output = Result<Answer<Out>, ToolError>> + Send;
+pub enum Answer<Out> { Output(Out), InputRequired(rmcp::model::InputRequiredResult) }  // From<Out>
+pub struct Call { pub caller: Caller, pub parts: Parts, pub protocol_version, pub capabilities,
+    pub request_state: Option<String>, pub input_responses: InputResponses }
+impl Call { pub fn can_elicit(&self) -> bool; pub fn retrying(&self) -> bool }
+pub struct Caller { pub user_id, pub client_id, pub actor, pub scopes }  // has(scope), from_token(&TokenInfo)
+
+pub struct ToolError(pub String);               // sent as an isError result; From<tronc::Error>
+pub fn failure(error: tronc::Error, hint: &str) -> ToolError;
+pub const UNAVAILABLE: &str;
+
+pub struct Confirmations;                       // new(ConfirmConfig) -> Result<Self, String>
+impl Confirmations {
+    pub async fn request(&self, call: &Call, kind: &str, target: &str, question: &str)
+        -> Result<(Option<InputRequiredResult>, Outcome)>;
+    pub async fn resume(&self, call: &Call, kind: &str) -> Result<Outcome>;
+    pub async fn confirm(&self, who: &Caller, id: &str) -> Result<Outcome>;   // confirm page
+    pub async fn dismiss(&self, who: &Caller, id: &str) -> Result<()>;
+    pub async fn open(&self, user_id: &str) -> Result<Vec<Action>>;
+    pub async fn state(&self, action: &Action) -> &'static str;              // ready, changed, missing
+    pub fn link(&self, id: &str) -> String;
+}
+pub struct ConfirmConfig { pub store: Arc<dyn Pending>, pub key: Vec<u8>, pub confirm_url: String,
+    pub kinds: HashMap<String, Kind>, pub pending_ttl: Duration, pub ask_ttl: Duration }
+pub struct Kind { pub tool, pub fingerprint, pub run }   // Kind::new(tool, async fingerprint, async run)
+pub struct Outcome { pub status: &'static str, pub action: Option<Action>, pub confirm_url: String }
+pub trait Pending { create, open, claim, finish, release, resolve }   // claim is atomic
+pub struct Action { id, user_id, kind, target, digest, summary, client_id, created_at, expires_at }
+pub struct PostgresPending { pub pool: PgPool }
+pub const PENDING_SCHEMA: &str;                 // migrations/mcp/0001_mcp_actions.sql
+pub fn gone() -> Error; pub fn changed() -> Error; pub fn is_changed(&Error) -> bool;
+pub fn invalid_confirmation() -> Error;         // and the GONE, CHANGED, INVALID_CONFIRMATION texts
+
+pub const RESULT_BUDGET: usize = 75_000;        // about 25k tokens
+pub fn fit_count(total: usize, size: impl Fn(usize) -> usize) -> usize;
+pub fn encoded_size<T: Serialize>(value: &T) -> usize;
+pub fn clip(text: &str, limit: usize) -> (&str, bool);
+pub fn encode_cursor<T: Serialize>(position: &T) -> String;
+pub fn decode_cursor<T: DeserializeOwned>(cursor: &str) -> Result<Option<T>, ToolError>;
+pub fn detailed(format: &str) -> Result<bool, ToolError>;   // response_format
+pub fn audit(event: Event<'_>);                 // info, target "mcp", never arguments
+pub struct ProtectedResourceMetadata; pub fn metadata_url(resource: &str) -> Option<String>;
+```
+
+| Route | Answer |
+|---|---|
+| `POST <resource path>` | Origin check (403), bearer token (401 or 403 with an RFC 6750 challenge), write-scope gate (403 `insufficient_scope` naming the write scope), per-person rate limit (429), then the transport |
+| `GET\|DELETE <resource path>` | 405 once authenticated |
+| `GET /.well-known/oauth-protected-resource<path>` and the bare well-known path | The RFC 9728 document, `Access-Control-Allow-Origin: *` |
+
+Mount it on the root router, outside `/api` and outside CSRF middleware:
+
+```rust
+let verifier: Arc<dyn tronc::mcp::Verifier> = porte_verifier;      // tronc never imports porte
+let mut options = tronc::mcp::Options::new("feuilles", resource, issuer, verifier);
+options.tools = tools;          // tronc::mcp::tool(spec, handler), named feuilles_<verb>
+let app = tronc::mcp::mount(app, options)?;
+```
+
+The app copies `migrations/mcp/0001_mcp_actions.sql` into its own migrations under its next
+number, and builds `ConfirmConfig { store: Arc::new(PostgresPending::new(pool)), .. }`.
+
+## `mcptest` (`mcptest`)
+
+The conformance kit, a port of Go `mcp/mcptest`, for an app's own tests.
+
+```rust
+pub async fn run(config: &Config);              // panics on the first failure
+pub struct Config { pub url: String, pub token: TokenFn, pub confirm: Vec<ConfirmCase> }
+pub struct ConfirmCase { pub tool: String, pub setup: Arc<dyn Fn() -> Fut<Target> + Send + Sync> }
+pub struct Target { pub args: JsonObject, pub runs: Arc<dyn Fn() -> Fut<usize> + Send + Sync> }
+pub async fn connect(endpoint: &str, token: &str, options: ClientOptions) -> Client;  // rmcp client
+pub struct ClientOptions { pub elicit: Option<Elicit>, pub version: Option<ProtocolVersion> }
+pub async fn call(client: &Client, name: &str, args: JsonObject) -> CallToolResult;
+pub async fn call_once(client: &Client, params: CallToolRequestParams) -> CallToolResponse;
+pub fn decode<T: DeserializeOwned>(result: &CallToolResult) -> T;
+pub fn text(result: &CallToolResult) -> String;
+pub fn answering(action: ElicitationAction, asked: Arc<AtomicUsize>) -> Elicit;
+pub async fn post(endpoint, token, body, headers) -> (StatusCode, HeaderMap);
+pub struct MemoryPending;                       // in-memory Pending, outcome(id) for assertions
 ```
 
 ## `logger` and `journal` (always; Journal needs `journal`)

@@ -32,7 +32,7 @@ a skip banner and pass, so read the output before trusting a green run.
 Each feature must also build alone. Check a change to feature wiring with:
 
 ```sh
-for f in http health spa migrate testdb journal apiref; do
+for f in http health spa migrate testdb journal apiref mcp mcptest; do
   cargo clippy --all-targets --no-default-features --features "$f" -- -D warnings
 done
 ```
@@ -46,6 +46,10 @@ done
 | `tests/database.rs` | `migrate` and `testdb` against Postgres |
 | `tests/journal.rs`, `tests/journal_layer.rs` | Journal wire format against a fake server |
 | `tests/apiref.rs`, `tests/apiref_coverage.rs` | The `/docs` page, the document and the drift check |
+| `tests/mcp_conformance.rs`, `tests/mcp_stateless.rs` | The `mcptest` kit on a toy app, confirmations, replicas |
+| `tests/mcp_example.rs` | Boots `examples/mcp.rs` and drives it with an rmcp client |
+| `tests/mcp_auth.rs`, `tests/mcp_build.rs`, `tests/mcp_helpers.rs` | Challenges, rate limit, metadata, boot checks, helpers |
+| `tests/mcp_pending.rs` | The memory and Postgres pending stores, racing claims |
 | other `tests/*.rs` | Chain, CORS, rate limit, overrides, JSON, env, logger |
 
 ## Vectors

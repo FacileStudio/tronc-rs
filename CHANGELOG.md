@@ -6,6 +6,29 @@ All notable changes to `tronc-rs` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-10
+
+### Added
+
+- **`mcp`, the remote MCP server, ported from Go `tronc/mcp`.** rmcp 3.9's Streamable HTTP
+  transport in stateless mode (spec 2026-07-28): no session, any replica answers. `Server` and
+  `mount` serve the endpoint at the resource's path and the RFC 9728 metadata at both well-known
+  paths, behind an Origin check, a bearer token from the app's `Verifier` (RFC 6750 challenges
+  with `invalid_token` and `insufficient_scope`), a write-scope gate that reads the JSON-RPC body
+  and batches, and a per-person rate limit (2/s, burst 30). `tool` builds a typed tool whose
+  annotations are mandatory; names carry the app prefix; `tools/list` is sorted and cacheable
+  privately. `Confirmations` asks before a sensitive action: MRTR `input_required` when the
+  client can elicit, otherwise a pending action and a confirm link, with HMAC-signed state,
+  single-use claims and a changed-target guard, on `PostgresPending` and the
+  `migrations/mcp/0001_mcp_actions.sql` table. `failure`, `clip`, `fit_count` and the cursor
+  helpers keep results actionable and under about 25k tokens.
+- **`mcptest`**, the conformance kit: `run`, an rmcp test client, `MemoryPending`.
+- **`examples/mcp.rs`**, driven by an rmcp client in `tests/mcp_example.rs`.
+
+### Changed
+
+- `http::plain` takes any body, not only a `&'static str`.
+
 ## [0.2.0] - 2026-11-10
 
 ### Added
