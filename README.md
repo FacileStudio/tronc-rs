@@ -1,5 +1,7 @@
 # tronc-rs
 
+[![ci](https://github.com/FacileStudio/tronc-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/FacileStudio/tronc-rs/actions/workflows/ci.yml)
+
 The Rust app chassis for the [Facile Studio](https://facile.studio) suite: the HTTP behaviour of
 Go [`tronc`](https://github.com/FacileStudio/tronc), for the suite apps written in Rust.
 
