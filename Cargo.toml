@@ -1,6 +1,6 @@
 [package]
 name = "tronc"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.98"
 description = "Shared Rust HTTP chassis for Facile Suite APIs, a port of Go tronc"
@@ -15,6 +15,7 @@ spa = ["http", "dep:tower-http", "dep:sha2", "dep:base64", "dep:percent-encoding
 migrate = ["dep:sqlx"]
 testdb = ["migrate"]
 journal = ["dep:ureq", "dep:time"]
+apiref = ["http", "dep:utoipa"]
 
 [dependencies]
 http = "1.5.0"
@@ -38,6 +39,7 @@ tokio = { version = "1.54.1", optional = true, features = ["time"] }
 tower = { version = "0.5.3", optional = true, features = ["util"] }
 tower-http = { version = "0.7.1", optional = true, features = ["fs"] }
 ureq = { version = "3.5.1", optional = true }
+utoipa = { version = "6.0.0", optional = true }
 
 [dev-dependencies]
 flate2 = "1.1.11"
@@ -46,6 +48,8 @@ tempfile = "3.27.0"
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
 tower = { version = "0.5.3", features = ["util"] }
+utoipa = "6.0.0"
+utoipa-axum = "0.3.0"
 
 [[example]]
 name = "minimal"

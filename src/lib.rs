@@ -2,7 +2,7 @@
 //!
 //! It gives a Rust app the HTTP behaviour of Go `tronc`: the same error envelope, the same health
 //! answers, the same security headers, the same client-IP rule and the same SPA fallback. Each
-//! part sits behind a feature: `http`, `health`, `spa`, `migrate`, `testdb`, `journal`.
+//! part sits behind a feature: `http`, `health`, `spa`, `migrate`, `testdb`, `journal`, `apiref`.
 
 #![deny(unused, dead_code)]
 #![warn(missing_docs)]
@@ -12,6 +12,8 @@ pub mod errors;
 pub mod logger;
 pub mod proxies;
 
+#[cfg(feature = "apiref")]
+pub mod apiref;
 #[cfg(feature = "health")]
 pub mod health;
 #[cfg(feature = "health")]
