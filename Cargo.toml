@@ -1,6 +1,6 @@
 [package]
 name = "tronc"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.98"
 description = "Shared Rust HTTP chassis for Facile Suite APIs, a port of Go tronc"
@@ -16,6 +16,8 @@ migrate = ["dep:sqlx"]
 testdb = ["migrate"]
 journal = ["dep:ureq", "dep:time"]
 apiref = ["http", "dep:utoipa"]
+mcp = ["http", "dep:rmcp", "dep:hmac", "dep:sha2", "dep:base64", "dep:getrandom", "dep:sqlx", "dep:time"]
+mcptest = ["mcp", "rmcp/client", "rmcp/transport-streamable-http-client-reqwest", "dep:reqwest"]
 
 [dependencies]
 http = "1.5.0"
@@ -30,11 +32,14 @@ base64 = { version = "0.23.1", optional = true }
 flate2 = { version = "1.1.11", optional = true }
 futures-util = { version = "0.3.34", optional = true, default-features = false, features = ["std"] }
 getrandom = { version = "0.4.3", optional = true }
+hmac = { version = "0.13.0", optional = true }
 http-body-util = { version = "0.1.5", optional = true }
 percent-encoding = { version = "2.3.2", optional = true }
+reqwest = { version = "0.13.5", optional = true, default-features = false, features = ["json"] }
+rmcp = { version = "3.9.0", optional = true, default-features = false, features = ["server", "elicitation", "transport-streamable-http-server"] }
 sha2 = { version = "0.11.1", optional = true }
-sqlx = { version = "0.9.0", optional = true, default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate"] }
-time = { version = "0.3.55", optional = true, features = ["formatting"] }
+sqlx = { version = "0.9.0", optional = true, default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "time"] }
+time = { version = "0.3.55", optional = true, features = ["formatting", "serde-well-known"] }
 tokio = { version = "1.54.1", optional = true, features = ["time"] }
 tower = { version = "0.5.3", optional = true, features = ["util"] }
 tower-http = { version = "0.7.1", optional = true, features = ["fs"] }
@@ -42,6 +47,7 @@ ureq = { version = "3.5.1", optional = true }
 utoipa = { version = "6.0.0", optional = true }
 
 [dev-dependencies]
+schemars = "1.2.3"
 flate2 = "1.1.11"
 http-body-util = "0.1.5"
 tempfile = "3.27.0"
@@ -50,6 +56,10 @@ tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "t
 tower = { version = "0.5.3", features = ["util"] }
 utoipa = "6.0.0"
 utoipa-axum = "0.3.0"
+
+[[example]]
+name = "mcp"
+required-features = ["mcp"]
 
 [[example]]
 name = "minimal"

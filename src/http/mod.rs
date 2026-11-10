@@ -135,8 +135,8 @@ pub async fn not_found() -> Response {
 }
 
 /// A plain-text answer as Go `http.Error` writes it, with `nosniff`.
-pub fn plain(status: StatusCode, body: &'static str) -> Response {
-    let mut response = (status, body).into_response();
+pub fn plain(status: StatusCode, body: impl Into<axum::body::Body>) -> Response {
+    let mut response = (status, body.into()).into_response();
     let headers = response.headers_mut();
     headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/plain; charset=utf-8"));
     headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
