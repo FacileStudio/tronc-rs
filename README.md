@@ -90,6 +90,10 @@ Serve with `into_make_service_with_connect_info`: the client-IP rule needs the p
 | [API](docs/api.md) | Every public item, module by module |
 | [Migrations in Rust apps](docs/migrations-rust.md) | Draft addendum to the suite migration standard |
 
+## License
+
+tronc-rs is licensed under the [MIT License](LICENSE), like Go tronc.
+
 ---
 
 Part of the [Facile Suite](https://facile.studio) — self-hosted tools for creative studios
