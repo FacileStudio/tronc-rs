@@ -1,0 +1,11 @@
+# tronc-rs: the Rust chassis for the Facile Suite, the sibling of Go tronc.
+
+kind: lib
+
+ignore: [.git, target, dist, build, coverage]
+extensions: [.rs, .sh]
+
+disabled:
+  - gen.line.long   # rustfmt owns line width (rustfmt.toml sets 120)
+
+failOn: error
