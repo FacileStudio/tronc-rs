@@ -1,0 +1,1 @@
+ALTER TABLE sheets ADD COLUMN owner text NOT NULL DEFAULT '';
