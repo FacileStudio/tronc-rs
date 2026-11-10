@@ -32,7 +32,7 @@ a skip banner and pass, so read the output before trusting a green run.
 Each feature must also build alone. Check a change to feature wiring with:
 
 ```sh
-for f in http health spa migrate testdb journal; do
+for f in http health spa migrate testdb journal apiref; do
   cargo clippy --all-targets --no-default-features --features "$f" -- -D warnings
 done
 ```
@@ -45,6 +45,7 @@ done
 | `tests/example.rs` | Boots `examples/minimal.rs`, probes `/health`, the SPA and `healthcheck` |
 | `tests/database.rs` | `migrate` and `testdb` against Postgres |
 | `tests/journal.rs`, `tests/journal_layer.rs` | Journal wire format against a fake server |
+| `tests/apiref.rs`, `tests/apiref_coverage.rs` | The `/docs` page, the document and the drift check |
 | other `tests/*.rs` | Chain, CORS, rate limit, overrides, JSON, env, logger |
 
 ## Vectors

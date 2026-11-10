@@ -24,6 +24,7 @@ Internet ──▶ Traefik ──▶ axum (:PORT) ── tronc::http::layers ─
 | `spa` | `spa` | Static client and inline script hashes |
 | `migrate`, `testdb` | `migrate`, `testdb` | sqlx migrations and per-binary test schemas |
 | `logger`, `journal` | `logger`, `Journal/sdk/journal` | JSON lines and Journal shipping |
+| `apiref` | `apiref` | `/docs` Scalar page, `/docs/openapi.json`, route drift check |
 
 ## Request lifecycle
 
@@ -60,6 +61,8 @@ Internet ──▶ Traefik ──▶ axum (:PORT) ── tronc::http::layers ─
 | Response `bytes` | Counted while written | The body's exact size hint, 0 for streams | No writer to wrap |
 | SPA conditional GET | `http.ServeContent` | `tower_http::services::ServeFile` | Same 304 and range behaviour |
 | Test schema | Kept | Kept | As Go; the plan said drop, Go wins |
+| API registry | Hand-written `Registry`, reflected schemas | A `utoipa` `OpenApi`, from `#[utoipa::path]` | The plan chose utoipa; schemas come from derives |
+| Route listing | `chi.Walk` | The router's `Debug` output | axum has no route iterator; a test pins the format |
 
 ## Data model
 

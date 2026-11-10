@@ -21,12 +21,14 @@ and SPA fallback, pinned by test vectors generated from Go `tronc`.
 - Applies `sqlx` migrations at boot and serves `migrate up|status|version|baseline`
 - Gives tests a real Postgres, one schema per test binary
 - Logs JSON lines on stdout and, with `journal`, ships them to Journal
+- Serves the `utoipa` OpenAPI 3.1 document behind a Scalar page at `/docs`, and reports
+  mounted routes the document forgot
 
 ## Stack
 
 | Layer | Tech |
 |---|---|
-| Runtime | Rust 1.98, edition 2024, axum 0.8, tower 0.5, tracing 0.1 |
+| Runtime | Rust 1.98, edition 2024, axum 0.8, tower 0.5, tracing 0.1, utoipa 6 (`apiref`) |
 | Storage | PostgreSQL 16 through sqlx 0.9 (features `health`, `migrate`, `testdb`) |
 
 ## Install
@@ -35,10 +37,10 @@ Pin a tag and pick features. Nothing is on by default.
 
 ```toml
 [dependencies]
-tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.1.0", features = ["http", "health", "spa", "migrate", "journal"] }
+tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.2.0", features = ["http", "health", "spa", "migrate", "journal"] }
 
 [dev-dependencies]
-tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.1.0", features = ["testdb"] }
+tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.2.0", features = ["testdb"] }
 ```
 
 | Feature | Modules |
@@ -50,6 +52,7 @@ tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.1.0", feat
 | `migrate` | `migrate` |
 | `testdb` | `testdb` (pulls in `migrate`) |
 | `journal` | `journal`, and the Journal layer in `logger` |
+| `apiref` | `apiref`, the `/docs` reference (pulls in `http`) |
 
 A minimal app, the shape of [`examples/minimal.rs`](examples/minimal.rs):
 

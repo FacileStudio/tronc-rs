@@ -6,6 +6,16 @@ All notable changes to `tronc-rs` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-10
+
+### Added
+
+- **`apiref`, the live API reference.** `apiref::routes` serves a Scalar page at `/docs` and the
+  `utoipa` OpenAPI 3.1 document at `/docs/openapi.json`, with the CSP widened to the pinned
+  bundle's exact URL on that route only, as Go `apiref`. `apiref::undocumented` reports mounted
+  routes the document lacks, for the drift test every app keeps; it reads the router's routes
+  without running a handler.
+
 ## [0.1.0] - 2026-11-10
 
 ### Added

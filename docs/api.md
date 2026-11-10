@@ -191,6 +191,34 @@ pub async fn pool(prefix: &str, migrator: &Migrator) -> Option<PgPool>;
 pub async fn truncate(pool: &PgPool, migrator: &Migrator, keep: &[&str]) -> sqlx::Result<()>;
 ```
 
+## `apiref` (`apiref`)
+
+```rust
+pub const SCALAR_SCRIPT_URL: &str;   // @scalar/api-reference@1.64.0 on jsDelivr, as Go
+pub const SCALAR_FONT_ORIGIN: &str;  // https://fonts.scalar.com
+pub const BASE_PATH: &str = "/docs";
+pub const SPEC_PATH: &str = "/docs/openapi.json";
+pub const DEFAULT_VERSION: &str = "1.0.0";
+pub struct Config { pub title: String, pub version: String, pub description: String,
+    pub servers: Vec<String>, pub script_url: String }
+pub fn document(config: &Config, doc: utoipa::openapi::OpenApi) -> OpenApi;
+pub fn routes<S>(config: &Config, doc: OpenApi) -> Result<Router<S>, String>;
+pub fn undocumented<S>(router: &Router<S>, doc: &OpenApi, config: &Config, ignore: &[&str]) -> Vec<String>;
+pub fn mounted<S>(router: &Router<S>) -> BTreeMap<String, Vec<String>>;
+```
+
+| Route | Answer |
+|---|---|
+| `GET /docs` | The Scalar page, with `script-src <bundle URL>` and `font-src 'self' https://fonts.scalar.com` added to the app's CSP on that route only |
+| `GET /docs/openapi.json` | The document, `Cache-Control: public, max-age=3600` |
+
+The drift test every app keeps:
+
+```rust
+let missing = tronc::apiref::undocumented(&app, &doc, &config, &[]);
+assert!(missing.is_empty(), "routes missing from the API document: {missing:?}");
+```
+
 ## `logger` and `journal` (always; Journal needs `journal`)
 
 ```rust
