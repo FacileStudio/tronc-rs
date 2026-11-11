@@ -6,6 +6,22 @@ All notable changes to `tronc-rs` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-11
+
+### Added
+
+- **`bulle`, the Bulle client, ported from Go `tronc/bulle` (v0.18.0).** Every AI feature in the
+  suite goes through Bulle and needs a plan with `ai.access`. `Client` covers the Ideas API
+  (`ideas`, `generate`, `run`, `run_status`, `decide`, `dismiss`) plus `call` for any later AI
+  route, with paths built from escaped segments, a 20 s default timeout and a 1 MiB answer cap.
+  The token comes from a `TokenSource` the caller supplies (a `&str` works), so porte-rs's token
+  exchange plugs in without tronc depending on it; `forget` retries a 401 once. A 402 is
+  `Error::PlanRequired` (bare body or envelope, unsafe `upgrade_url` dropped), other 4xx keep
+  their status in `Error::Status`, and 5xx, timeouts and network errors are
+  `Error::Unreachable`. `From<bulle::Error> for tronc::Error` maps them for the frontend as Go
+  does. `mount_ideas` serves `/ideas*` with the plan pre-check (`ai_access`) and the active
+  space supplied by the app. New dependency: reqwest 0.13 with rustls, behind the feature.
+
 ## [0.3.0] - 2026-11-10
 
 ### Added

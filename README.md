@@ -25,6 +25,8 @@ and SPA fallback, pinned by test vectors generated from Go `tronc`.
 - Logs JSON lines on stdout and, with `journal`, ships them to Journal
 - Serves the `utoipa` OpenAPI 3.1 document behind a Scalar page at `/docs`, and reports
   mounted routes the document forgot
+- Calls Bulle as the signed-in user (the Ideas API, or any AI route), with typed plan, status
+  and outage errors, and serves the `/api/ideas*` routes to the app's frontend
 - Mounts a stateless remote MCP server on rmcp, with the RFC 9728 metadata, scope gates and
   confirmations for sensitive tools, plus the `mcptest` conformance kit
 
@@ -32,7 +34,7 @@ and SPA fallback, pinned by test vectors generated from Go `tronc`.
 
 | Layer | Tech |
 |---|---|
-| Runtime | Rust 1.98, edition 2024, axum 0.8, tower 0.5, tracing 0.1, utoipa 6 (`apiref`), rmcp 3.9 (`mcp`) |
+| Runtime | Rust 1.98, edition 2024, axum 0.8, tower 0.5, tracing 0.1, utoipa 6 (`apiref`), rmcp 3.9 (`mcp`), reqwest 0.13 on rustls (`bulle`) |
 | Storage | PostgreSQL 16 through sqlx 0.9 (features `health`, `migrate`, `testdb`) |
 
 ## Install
@@ -41,10 +43,10 @@ Pin a tag and pick features. Nothing is on by default.
 
 ```toml
 [dependencies]
-tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.3.0", features = ["http", "health", "spa", "migrate", "journal"] }
+tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.4.0", features = ["http", "health", "spa", "migrate", "journal"] }
 
 [dev-dependencies]
-tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.3.0", features = ["testdb"] }
+tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.4.0", features = ["testdb"] }
 ```
 
 | Feature | Modules |
@@ -57,6 +59,7 @@ tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.3.0", feat
 | `testdb` | `testdb` (pulls in `migrate`) |
 | `journal` | `journal`, and the Journal layer in `logger` |
 | `apiref` | `apiref`, the `/docs` reference (pulls in `http`) |
+| `bulle` | `bulle`, the Bulle client and the `/ideas*` routes (pulls in `http`) |
 | `mcp` | `mcp`, the remote MCP server and its Postgres pending store (pulls in `http`) |
 | `mcptest` | `mcptest`, the MCP conformance kit and an rmcp test client (pulls in `mcp`) |
 
