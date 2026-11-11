@@ -1,6 +1,6 @@
 [package]
 name = "tronc"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.98"
 description = "Shared Rust HTTP chassis for Facile Suite APIs, a port of Go tronc"
@@ -17,6 +17,7 @@ migrate = ["dep:sqlx"]
 testdb = ["migrate"]
 journal = ["dep:ureq", "dep:time"]
 apiref = ["http", "dep:utoipa"]
+bulle = ["http", "dep:reqwest", "reqwest/rustls", "dep:time"]
 mcp = ["http", "dep:rmcp", "dep:hmac", "dep:sha2", "dep:base64", "dep:getrandom", "dep:sqlx", "dep:time"]
 mcptest = ["mcp", "rmcp/client", "rmcp/transport-streamable-http-client-reqwest", "dep:reqwest"]
 
