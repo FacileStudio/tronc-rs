@@ -65,6 +65,8 @@ Internet ──▶ Traefik ──▶ axum (:PORT) ── tronc::http::layers ─
 | Test schema | Kept | Kept | As Go; the plan said drop, Go wins |
 | API registry | Hand-written `Registry`, reflected schemas | A `utoipa` `OpenApi`, from `#[utoipa::path]` | The plan chose utoipa; schemas come from derives |
 | Route listing | `chi.Walk` | The router's `Debug` output | axum has no route iterator; a test pins the format |
+| Bulle token | `TokenSource` reads the user from `ctx` | Each call takes a `&impl TokenSource`; `mount_ideas` builds one per request from `Parts` | Rust has no request context |
+| Bulle `Forget` | A config field | `TokenSource::forget`, `None` by default | A fixed token never retries a 401 |
 
 ## Data model
 
@@ -73,5 +75,6 @@ pool's `search_path` names, and `testdb::truncate` never empties it.
 
 ## Cross-app integration
 
-`journal` posts batches to Journal's `POST /ingest`. `tronc-rs` never depends on `porte-rs`:
+`journal` posts batches to Journal's `POST /ingest`. `bulle` calls Bulle's `/api/ideas*` and
+`/api/runs/*` as the user, with a token the app exchanges through `porte-rs`. `tronc-rs` never depends on `porte-rs`:
 auth arrives as extractors the app writes on top of `porte`.

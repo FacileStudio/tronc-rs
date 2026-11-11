@@ -219,6 +219,99 @@ let missing = tronc::apiref::undocumented(&app, &doc, &config, &[]);
 assert!(missing.is_empty(), "routes missing from the API document: {missing:?}");
 ```
 
+## `bulle` (`bulle`)
+
+The client a suite app uses to reach Bulle as the signed-in user, a port of Go `tronc/bulle`
+(v0.18.0): the per-app Ideas API today, any later AI route through `Client::call`. Every AI
+feature in the suite goes through Bulle and needs a plan with `ai.access`. The token is an input:
+porte's token exchange (audience `bulle`, scopes `bulle.read` and `bulle.write`) supplies it, and
+tronc never depends on porte.
+
+```rust
+pub const DEFAULT_TIMEOUT: Duration;    // 20 s, as Go
+pub const MAX_ANSWER_BYTES: usize;      // 1 MiB, longer answers are cut and fail to decode
+pub type TokenFuture<'a>;               // Future<Output = Result<String, tronc::Error>>
+pub type ForgetFuture<'a>;              // Future<Output = ()>
+pub trait TokenSource: Send + Sync {
+    fn token(&self) -> TokenFuture<'_>;
+    fn forget(&self) -> Option<ForgetFuture<'_>> { None }   // Some(..) retries a 401 once
+}
+impl TokenSource for str; impl TokenSource for String;      // a fixed token
+pub struct Request { pub method: Method, pub segments: Vec<String>,
+    pub query: Vec<(String, String)>, pub body: Option<serde_json::Value> }
+impl Request {
+    pub fn new(method: Method, segments: impl IntoIterator<Item = impl Into<String>>) -> Self;
+    pub fn query(self, key: &str, value: &str) -> Self;   // skipped when value is empty
+    pub fn json(self, body: serde_json::Value) -> Self;
+}
+pub struct Client;   // Clone, shares one reqwest::Client
+impl Client {
+    pub fn new(url: &str) -> Result<Self, String>;
+    pub fn with_http(url: &str, http: reqwest::Client) -> Result<Self, String>;
+    pub fn base_url(&self) -> String;
+    pub fn continue_url(&self, session_id: &str) -> String;   // <base>/s/<session>
+    pub async fn call<T: DeserializeOwned, S: TokenSource + ?Sized>(&self, tokens: &S, request: Request) -> Result<T, Error>;
+    pub async fn ideas(&self, tokens, app: &str, space: &str) -> Result<IdeaList, Error>;
+    pub async fn generate(&self, tokens, app: &str, space: &str) -> Result<Batch, Error>;
+    pub async fn run(&self, tokens, idea_id: &str, space: &str) -> Result<RunStart, Error>;
+    pub async fn run_status(&self, tokens, run_id: &str) -> Result<Run, Error>;
+    pub async fn decide(&self, tokens, run_id: &str, call_id: &str, approve: bool) -> Result<(), Error>;
+    pub async fn dismiss(&self, tokens, idea_id: &str) -> Result<(), Error>;
+}
+pub enum Error { PlanRequired(PlanRequired), Status { status: u16, code: String, message: String },
+    Unreachable(String), BadSegment, Token(tronc::Error) }
+impl Error { pub fn status(&self) -> Option<u16>; pub fn is_unreachable(&self) -> bool; }
+impl From<Error> for tronc::Error;
+pub struct PlanRequired { pub message: String, pub upgrade_url: String, pub key: String }
+pub struct Idea; IdeaList; Source; Batch; RunStart; Run; Output; Approval;   // Bulle's JSON, serde
+pub const STATE_RUNNING, STATE_NEEDS_APPROVAL, STATE_DONE, STATE_FAILED: &str;
+pub fn run_state(status: &str, pending: usize) -> &'static str;
+pub struct IdeasOptions { pub app: String, pub client: Client, pub tokens: TokensFn,
+    pub space: Option<SpaceFn>, pub ai_access: Option<AiAccessFn>, pub upgrade_url: String }
+pub type TokensFn = Arc<dyn Fn(&Parts) -> Box<dyn TokenSource> + Send + Sync>;
+pub type SpaceFn = Arc<dyn Fn(&Parts) -> String + Send + Sync>;
+pub type AiAccessFn = Arc<dyn Fn(&Parts) -> bool + Send + Sync>;
+pub struct IdeasPage { pub ai_access: bool, pub upgrade_url: String, pub list: IdeaList }  // list flattened
+pub fn mount_ideas<S>(router: Router<S>, options: IdeasOptions) -> Result<Router<S>, String>;
+```
+
+| Bulle answers | `bulle::Error` | `tronc::Error` (what the app's frontend gets) |
+|---|---|---|
+| 2xx | `Ok`, an empty body decodes as `null` | |
+| 402, bare or in the envelope | `PlanRequired`, unsafe `upgrade_url` dropped | 402 `payment_required` with `upgrade_url` |
+| 400, 403, 404, 409, 429 | `Status` | the same status and code |
+| 401 or any other 4xx | `Status` | 503 `unavailable`: Bulle's 401 is about the app's token, not the session |
+| 5xx, timeout, network, unreadable body | `Unreachable` | 503 `unavailable` |
+| an empty, dot or 201-byte segment | `BadSegment`, nothing sent | 400 `invalid_argument` |
+| the token source failed | `Token(e)` | `e` as it is |
+
+Every segment is escaped on its own, so `a/../b?x=1` stays one segment
+(`a%2F..%2Fb%3Fx=1`). Query values are form-encoded (`space 1` is `space+1`), as Go.
+
+`mount_ideas` serves the app's own frontend. Merge it into the router under `/api`, behind the
+app's authentication:
+
+| Route | Answer |
+|---|---|
+| `GET /ideas` | `{"ai_access", "upgrade_url"?, "ideas", "generating", "last_batch_at"}` |
+| `POST /ideas/generate` | 202 `{"batch_id"}`, 402 without AI access |
+| `POST /ideas/{id}/run` | 202 `{"run_id","session_id","idea_id"}`, 402 without AI access |
+| `POST /ideas/{id}/dismiss` | 204 |
+| `GET /ideas/runs/{run}` | the `Run`, with `state` and `continue_url` |
+| `POST /ideas/runs/{run}/approvals/{call}` | `{"approve": bool}`, 204; approving needs AI access |
+
+Without AI access (`ai_access` says no) the list answers `ai_access: false` and the routes that
+spend AI answer 402 without calling Bulle.
+
+```rust
+let client = tronc::bulle::Client::new(&bulle_url)?;
+let tokens: tronc::bulle::TokensFn = Arc::new(|parts| Box::new(exchange_for(parts)));
+let mut ideas = tronc::bulle::IdeasOptions::new("toile", client.clone(), tokens);
+ideas.ai_access = Some(Arc::new(|parts| has_entitlement(parts, "ai.access")));
+ideas.upgrade_url = format!("{registre}/spaces");
+let api = tronc::bulle::mount_ideas(api, ideas)?;
+```
+
 ## `mcp` (`mcp`)
 
 A remote MCP server on rmcp 3.9's Streamable HTTP transport, stateless (spec 2026-07-28): no
