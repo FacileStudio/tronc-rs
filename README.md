@@ -27,8 +27,9 @@ and SPA fallback, pinned by test vectors generated from Go `tronc`.
   mounted routes the document forgot
 - Calls Bulle as the signed-in user (the Ideas API, or any AI route), with typed plan, status
   and outage errors, and serves the `/api/ideas*` routes to the app's frontend
-- Mounts a stateless remote MCP server on rmcp, with the RFC 9728 metadata, scope gates and
-  confirmations for sensitive tools, plus the `mcptest` conformance kit
+- Mounts a stateless remote MCP server on rmcp (`mcp::App`, Go's `NewApp`), with the RFC 9728
+  metadata, scope gates, confirmations for sensitive tools and the confirm page API
+  (`PendingPage`, Go's paths and JSON), plus the `mcptest` conformance kit
 
 ## Stack
 
@@ -43,10 +44,10 @@ Pin a tag and pick features. Nothing is on by default.
 
 ```toml
 [dependencies]
-tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.4.0", features = ["http", "health", "spa", "migrate", "journal"] }
+tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.5.0", features = ["http", "health", "spa", "migrate", "journal"] }
 
 [dev-dependencies]
-tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.4.0", features = ["testdb"] }
+tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.5.0", features = ["testdb"] }
 ```
 
 | Feature | Modules |
@@ -59,7 +60,7 @@ tronc = { git = "https://github.com/FacileStudio/tronc-rs", tag = "v0.4.0", feat
 | `testdb` | `testdb` (pulls in `migrate`) |
 | `journal` | `journal`, and the Journal layer in `logger` |
 | `apiref` | `apiref`, the `/docs` reference (pulls in `http`) |
-| `bulle` | `bulle`, the Bulle client and the `/ideas*` routes (pulls in `http`) |
+| `bulle` | `bulle`, the Bulle client (typed completions, no redirects) and the `/ideas*` routes (pulls in `http`) |
 | `mcp` | `mcp`, the remote MCP server and its Postgres pending store (pulls in `http`) |
 | `mcptest` | `mcptest`, the MCP conformance kit and an rmcp test client (pulls in `mcp`) |
 

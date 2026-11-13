@@ -1,20 +1,34 @@
 use time::OffsetDateTime;
 
 use super::pending::{MemoryPending, Row};
-use crate::mcp::{Action, OUTCOME_RUNNING, Pending, PendingFuture, gone};
+use crate::mcp::{Action, OPEN_LIMIT, OUTCOME_RUNNING, Pending, PendingFuture, gone};
 
 impl Pending for MemoryPending {
-    fn create<'a>(&'a self, action: &'a Action) -> PendingFuture<'a, ()> {
-        let row = Row { action: action.clone(), resolved: false, outcome: String::new() };
-        self.with(|rows| rows.insert(action.id.clone(), row));
-        Box::pin(async { Ok(()) })
+    fn create<'a>(&'a self, action: &'a Action) -> PendingFuture<'a, Action> {
+        let now = OffsetDateTime::now_utc();
+        let stored = self.with(|rows| {
+            let same = |r: &&Row| {
+                r.open(&action.user_id, now)
+                    && (&r.action.kind, &r.action.target, &r.action.digest)
+                        == (&action.kind, &action.target, &action.digest)
+            };
+            if let Some(found) =
+                newest(rows.values().filter(same).map(|r| r.action.clone()).collect()).into_iter().next()
+            {
+                return found;
+            }
+            rows.insert(action.id.clone(), Row { action: action.clone(), resolved: false, outcome: String::new() });
+            action.clone()
+        });
+        Box::pin(async move { Ok(stored) })
     }
 
     fn open<'a>(&'a self, user_id: &'a str) -> PendingFuture<'a, Vec<Action>> {
         let now = OffsetDateTime::now_utc();
-        let mut open: Vec<Action> =
-            self.with(|rows| rows.values().filter(|r| r.open(user_id, now)).map(|r| r.action.clone()).collect());
-        open.sort_by(|a, b| b.created_at.cmp(&a.created_at).then_with(|| a.id.cmp(&b.id)));
+        let mut open = newest(
+            self.with(|rows| rows.values().filter(|r| r.open(user_id, now)).map(|r| r.action.clone()).collect()),
+        );
+        open.truncate(OPEN_LIMIT + 1);
         Box::pin(async move { Ok(open) })
     }
 
@@ -56,4 +70,14 @@ impl Pending for MemoryPending {
         });
         Box::pin(async move { resolved })
     }
+
+    fn erase<'a>(&'a self, user_ids: &'a [String]) -> PendingFuture<'a, ()> {
+        self.with(|rows| rows.retain(|_, r| !user_ids.contains(&r.action.user_id)));
+        Box::pin(async { Ok(()) })
+    }
+}
+
+fn newest(mut actions: Vec<Action>) -> Vec<Action> {
+    actions.sort_by(|a, b| b.created_at.cmp(&a.created_at).then_with(|| a.id.cmp(&b.id)));
+    actions
 }

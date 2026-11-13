@@ -1,5 +1,6 @@
 use sqlx::PgPool;
 
+use super::erase::erase_pending;
 use super::pending::{Action, Pending, PendingFuture};
 use super::postgres_sql as sql;
 
@@ -23,7 +24,7 @@ impl PostgresPending {
 }
 
 impl Pending for PostgresPending {
-    fn create<'a>(&'a self, action: &'a Action) -> PendingFuture<'a, ()> {
+    fn create<'a>(&'a self, action: &'a Action) -> PendingFuture<'a, Action> {
         Box::pin(sql::create(&self.pool, action))
     }
 
@@ -45,5 +46,9 @@ impl Pending for PostgresPending {
 
     fn resolve<'a>(&'a self, user_id: &'a str, id: &'a str, outcome: &'a str) -> PendingFuture<'a, ()> {
         Box::pin(sql::resolve(&self.pool, user_id, id, outcome))
+    }
+
+    fn erase<'a>(&'a self, user_ids: &'a [String]) -> PendingFuture<'a, ()> {
+        Box::pin(erase_pending(&self.pool, user_ids))
     }
 }

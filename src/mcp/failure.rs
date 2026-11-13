@@ -1,4 +1,4 @@
-use crate::errors::{Code, Error};
+use crate::errors::{Code, Error, safe_upgrade_url};
 
 /// The text a model gets for a failure it cannot fix.
 pub const UNAVAILABLE: &str = "the app could not finish this request. Retry once; if it fails again, tell the user";
@@ -21,10 +21,24 @@ impl From<Error> for ToolError {
     }
 }
 
+/// A plan refusal from outside tronc, such as porte's forfait limit error, as Go `mcp.PlanLimit`.
+pub trait PlanLimit {
+    /// The feature the plan refused, and where to upgrade, empty when there is no page.
+    fn plan_limit(&self) -> (String, String);
+}
+
+/// The model's text for a [`PlanLimit`]: the feature, then the upgrade page when it is safe to
+/// show, as Go `Failure` reads one.
+pub fn plan_failure(limit: &dyn PlanLimit) -> ToolError {
+    let (feature, link) = limit.plan_limit();
+    ToolError(upgrade(&format!("the plan limit for {feature} is reached"), Some(&link)))
+}
+
 /// Turns a service error into one a model can act on. A bad argument or a missing precondition
 /// keeps its message. A missing record keeps its message plus `hint`, which should name the tool
-/// that lists valid ids. A plan refusal keeps its message and names the upgrade page. Anything
-/// else becomes [`UNAVAILABLE`], so internal detail stays out of the result.
+/// that lists valid ids. A plan refusal keeps its message and names the upgrade page. An
+/// unavailable dependency keeps its message, which says what is down. Anything else becomes
+/// [`UNAVAILABLE`], so internal detail stays out of the result.
 pub fn failure(error: Error, hint: &str) -> ToolError {
     let message = sentence(&error.message);
     ToolError(match error.code {
@@ -34,7 +48,8 @@ pub fn failure(error: Error, hint: &str) -> ToolError {
         | Code::AlreadyExists
         | Code::PermissionDenied
         | Code::RateLimited
-        | Code::ResourceExhausted => message,
+        | Code::ResourceExhausted
+        | Code::Unavailable => message,
         Code::PaymentRequired => upgrade(&message, error.upgrade_url.as_deref()),
         _ => UNAVAILABLE.to_owned(),
     })
@@ -46,9 +61,10 @@ fn sentence(message: &str) -> String {
 }
 
 fn upgrade(message: &str, url: Option<&str>) -> String {
-    let message = message.strip_suffix('.').unwrap_or(message);
+    let message = sentence(message);
+    let message = message.strip_suffix('.').unwrap_or(&message);
     match url {
-        Some(url) if !url.is_empty() => format!("{message}. Upgrade at {url}"),
+        Some(url) if safe_upgrade_url(url) => format!("{message}. Upgrade at {url}"),
         _ => format!("{message}."),
     }
 }

@@ -50,4 +50,5 @@ async fn a_question_asked_on_one_replica_is_answered_on_another() {
     let done = call_once(&second, retry).await;
     assert!(matches!(&done, CallToolResponse::Complete(r) if r.is_error != Some(true)), "{done:?}");
     assert_eq!(app.notes.deletes("a"), 1);
+    assert!(app.confirm.open("u1").await.expect("open").is_empty(), "the confirmed action is closed");
 }

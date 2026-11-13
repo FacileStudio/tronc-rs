@@ -49,23 +49,34 @@ done
 | `tests/mcp_conformance.rs`, `tests/mcp_stateless.rs` | The `mcptest` kit on a toy app, confirmations, replicas |
 | `tests/mcp_example.rs` | Boots `examples/mcp.rs` and drives it with an rmcp client |
 | `tests/mcp_auth.rs`, `tests/mcp_build.rs`, `tests/mcp_helpers.rs` | Challenges, rate limit, metadata, boot checks, helpers |
-| `tests/mcp_pending.rs` | The memory and Postgres pending stores, racing claims |
+| `tests/mcp_pending.rs` | The memory and Postgres pending stores: claims, dedupe, limit, erase, prune |
+| `tests/mcp_pending_page.rs` | The confirm page API: Go's paths and JSON, refusals, describe and done hooks |
+| `tests/bulle_client.rs`, `tests/bulle_complete.rs`, `tests/bulle_mount.rs` | The Bulle client, typed completions, redirects, the Ideas routes |
 | other `tests/*.rs` | Chain, CORS, rate limit, overrides, JSON, env, logger |
 
 ## Vectors
 
 The vectors are Go `tronc`'s `conformance/vectors/*.json`. Every file has the envelope
-`{"source","subject","cases":[{"name","input","want"}]}`. `tests/vectors/SOURCE` names the tag
-they came from, and a test fails when a file names another.
+`{"source","subject","cases":[{"name","input","want"}]}`; each file's `source` names the Go
+release that last changed it. `tests/vectors/SOURCE` holds the Go tag the files were synced from,
+and a test refuses anything but a release tag there.
 
 ```sh
-sh scripts/sync-vectors.sh v0.20.1
-sh scripts/sync-vectors.sh ~/Code/Facile/tronc-wt-vectors
+sh scripts/sync-vectors.sh v0.23.0
+sh scripts/sync-vectors.sh ~/Code/Facile/tronc-wt-vectors v0.23.0
 ```
 
-The script takes a tag (it clones `FacileStudio/tronc`), a checkout, or a vectors directory.
-After a sync, `git diff tests/vectors` shows what Go changed, and `cargo test --test
-conformance` shows what the port must change. Fix the port, never the vector.
+The script takes a tag (it clones `FacileStudio/tronc`), a checkout, or a vectors directory,
+and replaces the whole directory. After a sync, `git diff tests/vectors` shows what Go changed,
+and `cargo test --test conformance` shows what the port must change. Fix the port, never the
+vector. CI re-syncs from the recorded tag and fails on any difference, so commit a sync from a
+tag, never from a checkout.
+
+A new Go vector file, such as `mcp_*.json` or `bulle_*.json`, fails `every_vector_passes` with
+"no runner for subject" until it has a runner: add a module under `tests/conformance/`
+(`mcp_http.rs`, `mcp_values.rs` and `bulle.rs` hold the MCP and Bulle ones), declare it in
+`tests/conformance.rs` and add the subject's arm to `run_case`. The
+suite runs with `--all-features`, so a runner may use `mcp` or `bulle`.
 
 ## Rules
 

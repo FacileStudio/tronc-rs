@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::extract::Request;
-use axum::middleware::from_fn_with_state;
+use axum::middleware::{from_fn, from_fn_with_state};
 use axum::routing::any;
 use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
 use rmcp::transport::streamable_http_server::session::never::NeverSessionManager;
@@ -11,7 +11,7 @@ use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, Stream
 use tower::ServiceBuilder;
 
 use super::auth::{Gate, ProtectedResourceMetadata, WELL_KNOWN, require_token, serve_metadata};
-use super::gate::{MAX_REQUEST_BODY_BYTES, WriteGate, origin_guard, write_gate};
+use super::gate::{MAX_REQUEST_BODY_BYTES, WriteGate, origin_guard, post_only, write_gate};
 use super::handler::{Handler, Toolset};
 use super::options::{Options, normalize};
 use super::tool::{Tool, check};
@@ -128,6 +128,7 @@ impl Server {
             .layer(from_fn_with_state(gate, require_token))
             .option_layer(writes.map(|w| from_fn_with_state(w, write_gate)))
             .layer(from_fn_with_state(limiter, rate_limit))
+            .layer(from_fn(post_only))
             .service(transport);
         tower::util::BoxCloneSyncService::new(service)
     }

@@ -47,7 +47,11 @@ impl Error {
                 None => tracing::error!(detail = %self.message, "internal error"),
             }
         }
-        envelope_response(self.code.as_str(), &self.message, self.upgrade_url.as_deref())
+        let mut body = envelope(self.code.as_str(), &self.message, self.upgrade_url.as_deref());
+        if let Some(key) = &self.key {
+            body["error"]["key"] = Value::from(key.as_str());
+        }
+        json::write(self.code.status(), &body)
     }
 }
 

@@ -24,6 +24,10 @@ pub const EXTRA_CLIENT_ID: &str = "client_id";
 /// `mcpauth.ExtraActor`.
 pub const EXTRA_ACTOR: &str = "actor";
 
+/// The [`TokenInfo::extra`] key holding the Registre `sub` of the person the token speaks for,
+/// as porte's `mcpauth.ExtraSubject`.
+pub const EXTRA_SUBJECT: &str = "subject";
+
 const CLOCK_SKEW: Duration = Duration::from_secs(30);
 
 /// What a [`Verifier`] learned from a valid access token, as go-sdk `auth.TokenInfo`.
@@ -35,7 +39,8 @@ pub struct TokenInfo {
     pub scopes: Vec<String>,
     /// When the token expires. `None` is refused: every access token must expire.
     pub expires_at: Option<SystemTime>,
-    /// Claims the kit passes along, keyed by [`EXTRA_CLIENT_ID`], [`EXTRA_ACTOR`] and its own.
+    /// Claims the kit passes along, keyed by [`EXTRA_CLIENT_ID`], [`EXTRA_ACTOR`], [`EXTRA_SUBJECT`]
+    /// and its own.
     pub extra: HashMap<String, String>,
 }
 

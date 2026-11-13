@@ -48,12 +48,20 @@ pub struct Request {
     pub query: Vec<(String, String)>,
     /// The JSON body, if any.
     pub body: Option<Value>,
+    /// Extra request headers, such as [`super::ACTING_FOR_HEADER`].
+    pub headers: Vec<(String, String)>,
 }
 
 impl Request {
     /// A call to `/api/<segments...>` with no query and no body.
     pub fn new<I: IntoIterator<Item = S>, S: Into<String>>(method: Method, segments: I) -> Self {
-        Self { method, segments: segments.into_iter().map(Into::into).collect(), query: Vec::new(), body: None }
+        Self {
+            method,
+            segments: segments.into_iter().map(Into::into).collect(),
+            query: Vec::new(),
+            body: None,
+            headers: Vec::new(),
+        }
     }
 
     /// Adds the query parameter `key=value` unless `value` is empty.
@@ -61,6 +69,12 @@ impl Request {
         if !value.is_empty() {
             self.query.push((key.to_owned(), value.to_owned()));
         }
+        self
+    }
+
+    /// Adds the request header `name: value`.
+    pub fn header(mut self, name: &str, value: &str) -> Self {
+        self.headers.push((name.to_owned(), value.to_owned()));
         self
     }
 

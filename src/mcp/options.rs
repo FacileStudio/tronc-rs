@@ -5,13 +5,14 @@ use axum::extract::Request;
 
 use super::auth::{TokenInfo, Verifier};
 use super::tool::Tool;
-use crate::http::{RateLimitConfig, RemoteAddr};
+use crate::http::{RateLimitConfig, remote_addr_key64};
 
 /// How long a client may keep the tool list when [`Options::list_ttl`] is zero.
 pub const DEFAULT_LIST_TTL: Duration = Duration::from_secs(600);
 
 const DEFAULT_RATE: f64 = 2.0;
 const DEFAULT_BURST: u32 = 30;
+const DEFAULT_MAX_KEYS: usize = 10_000;
 
 /// An app's MCP scopes. A token with `write` may call every tool; a token with only `read` may
 /// call the read-only ones. `write` is empty on a read-only server.
@@ -53,8 +54,10 @@ pub struct Options {
     /// The read and write scopes. Empty means `<name>.read` and `<name>.write`. A server whose
     /// tools are all read-only may set `read` alone, and then advertises only that scope.
     pub scopes: Scopes,
-    /// Caps calls per person. A zero `limit` means two a second with a burst of thirty; no `key`
-    /// keys on the token's user.
+    /// Caps calls per person. A zero `limit` means two a second with a burst of thirty, and
+    /// [`super::App::new`] sets 120 a minute with a burst of 120. No `key` keys on the token's
+    /// user, or on the caller's address (its /64 for IPv6) without one. A zero `max_keys` keeps
+    /// ten thousand keys.
     pub rate_limit: RateLimitConfig,
     /// Browser origins allowed besides the resource's own. Requests without `Origin`, from native
     /// clients, always pass.
@@ -116,6 +119,9 @@ pub(super) fn normalize(opts: &mut Options) -> Result<(), String> {
         opts.rate_limit.limit = DEFAULT_RATE;
         opts.rate_limit.burst = opts.rate_limit.burst.max(DEFAULT_BURST);
     }
+    if opts.rate_limit.max_keys == 0 {
+        opts.rate_limit.max_keys = DEFAULT_MAX_KEYS;
+    }
     if opts.rate_limit.key.is_none() {
         opts.rate_limit.key = Some(Arc::new(token_user));
     }
@@ -125,6 +131,6 @@ pub(super) fn normalize(opts: &mut Options) -> Result<(), String> {
 fn token_user(request: &Request) -> String {
     match request.extensions().get::<TokenInfo>().filter(|info| !info.user_id.is_empty()) {
         Some(info) => format!("user:{}", info.user_id),
-        None => format!("addr:{}", request.extensions().get::<RemoteAddr>().map_or("", |r| r.0.as_str())),
+        None => format!("addr:{}", remote_addr_key64(request)),
     }
 }

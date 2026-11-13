@@ -24,13 +24,15 @@ impl Code {
 }
 pub fn status_for(code: &str) -> http::StatusCode;
 pub type Cause = Box<dyn std::error::Error + Send + Sync>;
-pub struct Error { pub code: Code, pub message: String, pub upgrade_url: Option<String>, pub cause: Option<Cause> }
+pub struct Error { pub code: Code, pub message: String, pub upgrade_url: Option<String>,
+    pub key: Option<String> /* sent as "key", such as ai.access */, pub cause: Option<Cause> }
 impl Error {
     pub fn new(code: Code, message: impl Into<String>) -> Self;
     pub fn invalid / unauthorized / payment_required / forbidden / not_found / conflict / failed
         / too_large / rate_limited / not_allowed / unavailable (message: impl Into<String>) -> Self;
     pub fn internal(message: impl Into<String>, cause: impl Into<Cause>) -> Self;
     pub fn with_upgrade_url(self, raw: impl Into<String>) -> Self;
+    pub fn with_key(self, key: impl Into<String>) -> Self;
 }
 impl axum::response::IntoResponse for Error;
 pub fn safe_upgrade_url(raw: &str) -> bool;
@@ -133,8 +135,10 @@ pub fn redact_query(raw: &str) -> String;
 pub enum Kind { Api, Health, Static }
 pub fn classify(path: &str, api_prefix: &str) -> Kind;
 pub fn level_for(kind: Kind, status: u16) -> tracing::Level;
-pub struct RateLimitConfig { limit: f64, burst: u32, key: Option<KeyFn>, status: Option<StatusCode> }
+pub struct RateLimitConfig { limit: f64, burst: u32, key: Option<KeyFn>, status: Option<StatusCode>,
+    max_keys: usize /* 0 keeps every key */, on_refuse: Option<RefuseFn> }
 pub struct RateLimiter;  // new(config), allow(key, now) -> Result<(), u64>
+pub fn remote_addr_key64(request: &Request) -> String;   // IPv6 callers keyed on their /64
 pub async fn rate_limit(State<Arc<RateLimiter>>, Request, Next) -> Response;
 ```
 
@@ -246,11 +250,14 @@ impl Request {
 }
 pub struct Client;   // Clone, shares one reqwest::Client
 impl Client {
-    pub fn new(url: &str) -> Result<Self, String>;
+    pub fn new(url: &str) -> Result<Self, String>;                       // never follows a redirect
+    pub fn with_timeout(url: &str, timeout: Duration) -> Result<Self, String>;
     pub fn with_http(url: &str, http: reqwest::Client) -> Result<Self, String>;
     pub fn base_url(&self) -> String;
     pub fn continue_url(&self, session_id: &str) -> String;   // <base>/s/<session>
     pub async fn call<T: DeserializeOwned, S: TokenSource + ?Sized>(&self, tokens: &S, request: Request) -> Result<T, Error>;
+    pub async fn complete(&self, tokens, request: &CompleteRequest) -> Result<Completion, Error>;
+    pub async fn decide_ai(&self, tokens, request: &DecideRequest) -> Result<Decision, Error>;  // X-Bulle-Acting-For
     pub async fn ideas(&self, tokens, app: &str, space: &str) -> Result<IdeaList, Error>;
     pub async fn generate(&self, tokens, app: &str, space: &str) -> Result<Batch, Error>;
     pub async fn run(&self, tokens, idea_id: &str, space: &str) -> Result<RunStart, Error>;
@@ -258,6 +265,9 @@ impl Client {
     pub async fn decide(&self, tokens, run_id: &str, call_id: &str, approve: bool) -> Result<(), Error>;
     pub async fn dismiss(&self, tokens, idea_id: &str) -> Result<(), Error>;
 }
+pub struct CompleteRequest { pub system, pub prompt, pub input: String, pub schema: Option<Value>,
+    pub max_tokens: u32, pub space_id: String }  // empty fields are not sent
+pub struct Completion { pub text: String, pub json: Option<Value>, pub model: String }
 pub enum Error { PlanRequired(PlanRequired), Status { status: u16, code: String, message: String },
     Unreachable(String), BadSegment, Token(tronc::Error) }
 impl Error { pub fn status(&self) -> Option<u16>; pub fn is_unreachable(&self) -> bool; }
@@ -330,6 +340,15 @@ pub struct TokenInfo { pub user_id: String, pub scopes: Vec<String>,
     pub expires_at: Option<SystemTime>, pub extra: HashMap<String, String> }
 pub const EXTRA_CLIENT_ID: &str = "client_id";  // porte mcpauth.ExtraClientID
 pub const EXTRA_ACTOR: &str = "actor";          // porte mcpauth.ExtraActor
+pub const EXTRA_SUBJECT: &str = "subject";      // porte mcpauth.ExtraSubject
+
+pub struct AppConfig { resource, issuer, version, origins, state_key: Vec<u8>, verifier,
+    pending: Option<Arc<dyn Pending>>, per_minute: u32 }   // AppConfig::new(resource, issuer, verifier)
+pub struct AppSpec { name, title, instructions, scopes: Scopes, kinds: HashMap<String, Kind>, tools: Vec<Tool> }
+pub struct App { pub options: Options, pub confirmations: Option<Confirmations>, pub url: String }
+impl App { pub fn new(AppConfig, AppSpec) -> Result<Self, String>; pub fn mount<S>(self, Router<S>) -> Result<Router<S>, String> }
+pub const DEFAULT_PER_MINUTE: u32 = 120;        // Go NewApp: 120 a minute, burst 120
+pub fn state_key(app: &str, secret: &str) -> Vec<u8>;    // sha256("<app>-mcp-state:" + secret)
 
 pub struct Options { name, title, version, instructions, resource, issuer, verifier: Arc<dyn Verifier>,
     scopes: Scopes, rate_limit: http::RateLimitConfig, origins: Vec<String>, tools: Vec<Tool>,
@@ -348,6 +367,8 @@ pub fn mount<S>(router: Router<S>, options: Options) -> Result<Router<S>, String
 pub struct ToolSpec { pub name: String, pub title: String, pub description: String,
     pub annotations: Option<Annotations> }      // None is refused at boot
 pub struct Annotations { pub read_only: bool, pub destructive: bool, pub idempotent: bool, pub open_world: bool }
+// presets: READ, ADD, SET, OVERWRITE, REMOVE; .open_world(). Overwriting or removing user data,
+// or silencing an alert, is destructive; only a repeat with no further effect is idempotent.
 pub fn tool<In, Out, F, Fut>(spec: ToolSpec, handler: F) -> Tool
     where In: DeserializeOwned + JsonSchema, Out: Serialize + JsonSchema,
           F: Fn(Call, In) -> Fut, Fut: Future<Output = Result<Answer<Out>, ToolError>> + Send;
@@ -358,7 +379,9 @@ impl Call { pub fn can_elicit(&self) -> bool; pub fn retrying(&self) -> bool }
 pub struct Caller { pub user_id, pub client_id, pub actor, pub scopes }  // has(scope), from_token(&TokenInfo)
 
 pub struct ToolError(pub String);               // sent as an isError result; From<tronc::Error>
-pub fn failure(error: tronc::Error, hint: &str) -> ToolError;
+pub fn failure(error: tronc::Error, hint: &str) -> ToolError;   // unavailable keeps its message
+pub trait PlanLimit { fn plan_limit(&self) -> (String, String); }   // (feature, upgrade_url)
+pub fn plan_failure(limit: &dyn PlanLimit) -> ToolError;
 pub const UNAVAILABLE: &str;
 
 pub struct Confirmations;                       // new(ConfirmConfig) -> Result<Self, String>
@@ -368,17 +391,38 @@ impl Confirmations {
     pub async fn resume(&self, call: &Call, kind: &str) -> Result<Outcome>;
     pub async fn confirm(&self, who: &Caller, id: &str) -> Result<Outcome>;   // confirm page
     pub async fn dismiss(&self, who: &Caller, id: &str) -> Result<()>;
-    pub async fn open(&self, user_id: &str) -> Result<Vec<Action>>;
+    pub async fn ask(&self, call, kind, target, question) -> Result<Answer<Confirmation>, ToolError>;
+    pub async fn answered(&self, call, kind, done: &str) -> Result<Confirmation, ToolError>;
+    pub async fn open(&self, user_id: &str) -> Result<Vec<Action>>;          // at most OPEN_LIMIT (100)
+    pub async fn list(&self, user_id: &str) -> Result<(Vec<Action>, bool)>;  // plus truncated
+    pub fn waiting(&self) -> String;                                         // "Nothing happened yet: ..."
     pub async fn state(&self, action: &Action) -> &'static str;              // ready, changed, missing
     pub fn link(&self, id: &str) -> String;
 }
 pub struct ConfirmConfig { pub store: Arc<dyn Pending>, pub key: Vec<u8>, pub confirm_url: String,
     pub kinds: HashMap<String, Kind>, pub pending_ttl: Duration, pub ask_ttl: Duration }
 pub struct Kind { pub tool, pub fingerprint, pub run }   // Kind::new(tool, async fingerprint, async run)
-pub struct Outcome { pub status: &'static str, pub action: Option<Action>, pub confirm_url: String }
-pub trait Pending { create, open, claim, finish, release, resolve }   // claim is atomic
+pub struct Outcome { pub status: &'static str, pub action: Option<Action>, pub confirm_url: String,
+    pub message: String }                         // waiting() with a link, MESSAGE_DECLINED after a decline
+pub trait Pending { create /* reuses an open duplicate */, open /* may stop at 101 */, claim, finish,
+    release, resolve, erase(user_ids) }           // claim is atomic
+pub struct Confirmation { pub status: String, pub confirm_url: String, pub message: String }
+pub const MESSAGE_DECLINED: &str = "The user declined. Nothing happened.";
+pub fn digest(fields) -> String; pub fn target_ids(&Action, refusal: Error) -> Result<(i64, i64)>;
 pub struct Action { id, user_id, kind, target, digest, summary, client_id, created_at, expires_at }
-pub struct PostgresPending { pub pool: PgPool }
+pub struct PostgresPending { pub pool: PgPool }  // also a Pruner
+pub trait Pruner { fn prune(&self, older_than: Duration) -> PruneFuture<'_>; }
+pub async fn prune_pending<'c>(executor: impl PgExecutor<'c>, older_than: Duration) -> Result<u64>;
+pub fn keep_pruned(store: impl Pruner, every: Duration, older_than: Duration) -> JoinHandle<()>;  // 1 h, 30 days
+pub async fn erase_pending<'c>(executor: impl PgExecutor<'c>, user_ids: &[String]) -> Result<()>;
+
+pub struct PendingPage<T = PendingItem>;        // new(confirmations, actor, user), describe(f), done(f), routes()
+pub struct PendingItem { id, kind, client_id, summary, created_at, expires_at, state }
+pub struct PendingList<T> { pub actions: Vec<T>, pub truncated: bool }
+pub struct PendingResult { pub status: String, pub url: String }
+pub fn delegated() -> Error;                    // 403: only the person's own session confirms
+pub const PENDING_PATH: &str = "/pending"; pub const PENDING_API_PATH: &str = "/mcp/pending";
+pub const PENDING_ROUTES: [(method, path, summary, status); 3];
 pub const PENDING_SCHEMA: &str;                 // migrations/mcp/0001_mcp_actions.sql
 pub fn gone() -> Error; pub fn changed() -> Error; pub fn is_changed(&Error) -> bool;
 pub fn invalid_confirmation() -> Error;         // and the GONE, CHANGED, INVALID_CONFIRMATION texts
@@ -387,6 +431,8 @@ pub const RESULT_BUDGET: usize = 75_000;        // about 25k tokens
 pub fn fit_count(total: usize, size: impl Fn(usize) -> usize) -> usize;
 pub fn encoded_size<T: Serialize>(value: &T) -> usize;
 pub fn clip(text: &str, limit: usize) -> (&str, bool);
+pub fn page<T>(items: &[T], cursor: &str, size: usize) -> Result<(&[T], String), ToolError>;
+pub fn offset(cursor: &str) -> Result<usize, ToolError>; pub fn cursor(offset: usize, total: usize) -> String;
 pub fn encode_cursor<T: Serialize>(position: &T) -> String;
 pub fn decode_cursor<T: DeserializeOwned>(cursor: &str) -> Result<Option<T>, ToolError>;
 pub fn detailed(format: &str) -> Result<bool, ToolError>;   // response_format
@@ -399,18 +445,28 @@ pub struct ProtectedResourceMetadata; pub fn metadata_url(resource: &str) -> Opt
 | `POST <resource path>` | Origin check (403), bearer token (401 or 403 with an RFC 6750 challenge), write-scope gate (403 `insufficient_scope` naming the write scope), per-person rate limit (429), then the transport |
 | `GET\|DELETE <resource path>` | 405 once authenticated |
 | `GET /.well-known/oauth-protected-resource<path>` and the bare well-known path | The RFC 9728 document, `Access-Control-Allow-Origin: *` |
+| `GET /mcp/pending` (from `PendingPage`, under `/api`) | `{"actions":[...]}`, `"truncated":true` past 100 |
+| `POST /mcp/pending/{id}/confirm` | `{"status":"done"}` or the app's `done` body; 403 delegated, 404 gone, 412 changed |
+| `POST /mcp/pending/{id}/dismiss` | `{"status":"dismissed"}`; 403 delegated, 404 gone |
 
 Mount it on the root router, outside `/api` and outside CSRF middleware:
 
 ```rust
-let verifier: Arc<dyn tronc::mcp::Verifier> = porte_verifier;      // tronc never imports porte
-let mut options = tronc::mcp::Options::new("feuilles", resource, issuer, verifier);
-options.tools = tools;          // tronc::mcp::tool(spec, handler), named feuilles_<verb>
-let app = tronc::mcp::mount(app, options)?;
+let store = PostgresPending::new(pool.clone());
+tronc::mcp::keep_pruned(store.clone(), Duration::ZERO, Duration::ZERO);   // hourly, 30 days
+let mut cfg = tronc::mcp::AppConfig::new(resource, issuer, porte_verifier);   // tronc never imports porte
+cfg.state_key = tronc::mcp::state_key("docs", &secret);
+cfg.pending = Some(Arc::new(store));
+let spec = tronc::mcp::AppSpec { name: "docs".into(), title: "Docs".into(), kinds, ..Default::default() };
+let mut mcp = tronc::mcp::App::new(cfg, spec)?;
+mcp.options.tools = tools(&state, mcp.confirmations.clone());   // tronc::mcp::tool, named docs_<verb>
+let page = PendingPage::new(mcp.confirmations.clone(), "docs-web", own_session_user);
+let api = api.merge(page.routes());              // behind the session middleware, nested under /api
+let app = mcp.mount(app)?;
 ```
 
 The app copies `migrations/mcp/0001_mcp_actions.sql` into its own migrations under its next
-number, and builds `ConfirmConfig { store: Arc::new(PostgresPending::new(pool)), .. }`.
+number, and its account erasure calls `erase_pending(&mut *tx, &ids)` in its transaction.
 
 ## `mcptest` (`mcptest`)
 
