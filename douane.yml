@@ -1,0 +1,5 @@
+permits:
+  - id: CVE-2026-119375
+    package: libsqlite3-sys
+    reason: lockfile-only; sqlx-macros-core lists sqlx-sqlite as a weak optional feature, no crate here enables it, so libsqlite3-sys is never compiled or linked (Postgres only)
+    expires: 2027-05-13
