@@ -83,3 +83,14 @@ pub(super) async fn origin_guard(State(allowed): State<Arc<Vec<String>>>, reques
     }
     next.run(request).await
 }
+
+/// Answers a GET or DELETE on the stateless endpoint with a plain-text 405, as Go's endpoint
+/// does: there is no session stream to open or close.
+pub(super) async fn post_only(request: Request, next: Next) -> Response {
+    if !matches!(*request.method(), Method::GET | Method::DELETE) {
+        return next.run(request).await;
+    }
+    let mut response = plain(StatusCode::METHOD_NOT_ALLOWED, "Method Not Allowed\n");
+    response.headers_mut().insert(header::ALLOW, HeaderValue::from_static("POST"));
+    response
+}

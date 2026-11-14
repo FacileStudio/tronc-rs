@@ -68,10 +68,3 @@ pub struct Nothing {}
 pub struct NoteList {
     pub ids: Vec<String>,
 }
-
-#[derive(Serialize, Deserialize, JsonSchema)]
-pub struct DeleteOutput {
-    pub status: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub confirm_url: String,
-}

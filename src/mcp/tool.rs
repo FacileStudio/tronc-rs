@@ -15,6 +15,13 @@ use super::failure::ToolError;
 /// A tool's hints for the client's permission UI. Every tool declares all four, because clients
 /// treat a missing destructive or open-world hint as true. They are UX, never the gate: the
 /// scopes and [`super::Confirmations`] are.
+///
+/// The suite rule: any tool that overwrites or removes user data, or silences an alert, is
+/// `destructive`, a rename included. Only a tool whose repeat call with the same arguments has
+/// no further effect is `idempotent`; a tool that asks for a confirmation, sends, or creates on
+/// each call is not. Start from a preset: [`Self::READ`], [`Self::ADD`],
+/// [`Self::SET`], [`Self::OVERWRITE`] or [`Self::REMOVE`], plus [`Self::open_world`] for content
+/// from outside the app.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Annotations {
     /// Changes nothing. Every other tool needs the write scope.
@@ -25,6 +32,26 @@ pub struct Annotations {
     pub idempotent: bool,
     /// Reads or reaches content from outside the app, such as mail from other senders.
     pub open_world: bool,
+}
+
+impl Annotations {
+    /// Reads only.
+    pub const READ: Self = Self { read_only: true, destructive: false, idempotent: true, open_world: false };
+    /// Creates something new on every call, such as a comment or an event.
+    pub const ADD: Self = Self { read_only: false, destructive: false, idempotent: false, open_world: false };
+    /// Sets a state without losing data, so a repeat changes nothing, such as moving a card or
+    /// restoring from the trash.
+    pub const SET: Self = Self { read_only: false, destructive: false, idempotent: true, open_world: false };
+    /// Replaces user data with the given value, such as a rename or an edit.
+    pub const OVERWRITE: Self = Self { read_only: false, destructive: true, idempotent: true, open_world: false };
+    /// Deletes, trashes or silences after asking for a confirmation, such as deleting a board or
+    /// muting an alert. Asking makes it not idempotent.
+    pub const REMOVE: Self = Self { read_only: false, destructive: true, idempotent: false, open_world: false };
+
+    /// The same hints for a tool that reads or reaches content from outside the app.
+    pub const fn open_world(self) -> Self {
+        Self { open_world: true, ..self }
+    }
 }
 
 /// Describes one tool.

@@ -35,6 +35,7 @@ struct Fields {
     message: String,
     upgrade_url: String,
     key: String,
+    limit: i64,
 }
 
 /// Reads an error body in tronc's `{"error":{...}}` envelope, as `{"error":"message"}`, or bare
@@ -53,5 +54,5 @@ fn envelope(raw: &[u8]) -> Fields {
 fn plan_required(raw: &[u8]) -> Error {
     let fields = envelope(raw);
     let upgrade_url = if safe_upgrade_url(&fields.upgrade_url) { fields.upgrade_url } else { String::new() };
-    Error::PlanRequired(PlanRequired { message: fields.message, upgrade_url, key: fields.key })
+    Error::PlanRequired(PlanRequired { message: fields.message, upgrade_url, key: fields.key, limit: fields.limit })
 }

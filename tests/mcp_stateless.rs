@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use rmcp::model::{CallToolRequestParams, CallToolResponse, ElicitationAction, JsonObject};
-use tronc::mcp::CONFIRM_INPUT;
+use tronc::mcp::{AppConfig, AppSpec, CONFIRM_INPUT};
 use tronc::mcptest::{ClientOptions, answering, call_once, connect, post};
 
 use app::{replica, serve};
@@ -50,4 +50,12 @@ async fn a_question_asked_on_one_replica_is_answered_on_another() {
     let done = call_once(&second, retry).await;
     assert!(matches!(&done, CallToolResponse::Complete(r) if r.is_error != Some(true)), "{done:?}");
     assert_eq!(app.notes.deletes("a"), 1);
+    assert!(app.confirm.open("u1").await.expect("open").is_empty(), "the confirmed action is closed");
+}
+
+#[test]
+fn the_app_url_drops_the_userinfo() {
+    let cfg = AppConfig::new("https://u:p@notes.example:8443/mcp", "https://issuer.example", Arc::new(notes::Tokens));
+    let app = tronc::mcp::App::new(cfg, AppSpec { name: "notes".into(), title: "Notes".into(), ..AppSpec::default() });
+    assert_eq!(app.expect("app").url, "https://notes.example:8443");
 }

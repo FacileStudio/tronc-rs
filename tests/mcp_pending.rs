@@ -6,7 +6,10 @@ use std::time::Duration;
 
 use sqlx::migrate::Migrator;
 use time::OffsetDateTime;
-use tronc::mcp::{Action, GONE, OUTCOME_DONE, OUTCOME_RUNNING, PENDING_SCHEMA, Pending, PostgresPending};
+use tronc::mcp::{
+    Action, GONE, OPEN_LIMIT, OUTCOME_DONE, OUTCOME_RUNNING, PENDING_SCHEMA, Pending, PostgresPending, erase_pending,
+    prune_pending,
+};
 use tronc::mcptest::MemoryPending;
 use tronc::testdb;
 
@@ -17,7 +20,7 @@ fn action(id: &str, user_id: &str, age: i64) -> Action {
         id: id.into(),
         user_id: user_id.into(),
         kind: "k".into(),
-        target: "t".into(),
+        target: id.into(),
         digest: "d".into(),
         summary: "Delete?".into(),
         client_id: "c".into(),
@@ -63,13 +66,32 @@ async fn lists_and_resolves(store: Arc<dyn Pending>) {
     assert_eq!(store.resolve("u3", "old", "dismissed").await.expect_err("twice").message, GONE);
 }
 
+async fn dedupes_limits_and_erases(store: Arc<dyn Pending>) {
+    let first = store.create(&action("d1", "u5", 10)).await.expect("create");
+    let again = store.create(&Action { target: "d1".into(), ..action("d2", "u5", 0) }).await.expect("same request");
+    assert_eq!((first.id.as_str(), again.id.as_str()), ("d1", "d1"), "the same request reuses the open action");
+    let other = Action { target: "d1".into(), digest: "changed".into(), ..action("d3", "u5", 0) };
+    assert_eq!(store.create(&other).await.expect("create").id, "d3", "another digest is another action");
+    let open: Vec<String> = store.open("u5").await.expect("open").into_iter().map(|a| a.id).collect();
+    assert_eq!(open, ["d3", "d1"], "two actions, newest first");
+    for n in 0..=OPEN_LIMIT {
+        store.create(&action(&format!("l{n}"), "u8", 0)).await.expect("create");
+    }
+    assert_eq!(store.open("u8").await.expect("open").len(), OPEN_LIMIT + 1, "a store may stop at the limit plus one");
+    store.create(&action("e1", "u6", 0)).await.expect("create");
+    store.erase(&["u5".to_owned()]).await.expect("erase");
+    assert!(store.open("u5").await.expect("open").is_empty(), "erase deletes every action");
+    assert_eq!(store.open("u6").await.expect("open").len(), 1, "erase spares other people");
+}
+
 #[tokio::test]
 async fn the_memory_store_claims_once_and_resolves() {
     let store = Arc::new(MemoryPending::new());
     claims_once(store.clone()).await;
     store.claim("u1", "a1").await.expect("claim");
     assert_eq!(store.outcome("a1"), OUTCOME_RUNNING);
-    lists_and_resolves(store).await;
+    lists_and_resolves(store.clone()).await;
+    dedupes_limits_and_erases(store).await;
 }
 
 #[tokio::test]
@@ -80,5 +102,28 @@ async fn the_postgres_store_claims_once_and_resolves() {
     testdb::truncate(&pool, &migrator, &[]).await.expect("truncate");
     sqlx::raw_sql(PENDING_SCHEMA).execute(&pool).await.expect("the schema is idempotent");
     claims_once(Arc::new(PostgresPending::new(pool.clone()))).await;
-    lists_and_resolves(Arc::new(PostgresPending::new(pool))).await;
+    lists_and_resolves(Arc::new(PostgresPending::new(pool.clone()))).await;
+    dedupes_limits_and_erases(Arc::new(PostgresPending::new(pool.clone()))).await;
+    prunes_closed_actions(pool).await;
+}
+
+async fn prunes_closed_actions(pool: sqlx::PgPool) {
+    sqlx::query("DELETE FROM mcp_actions").execute(&pool).await.expect("start empty");
+    let store = PostgresPending::new(pool.clone());
+    store.create(&action("p-open", "u7", 0)).await.expect("create");
+    store.create(&action("p-done", "u7", 0)).await.expect("create");
+    store.resolve("u7", "p-done", "dismissed").await.expect("resolve");
+    let mut stale = action("p-stale", "u7", 7200);
+    stale.expires_at = stale.created_at + Duration::from_secs(1);
+    store.create(&stale).await.expect("create");
+    sqlx::query("UPDATE mcp_actions SET resolved_at = now() - interval '2 hours' WHERE id = 'p-done'")
+        .execute(&pool)
+        .await
+        .expect("age the resolved action");
+    assert_eq!(prune_pending(&pool, Duration::from_secs(3600)).await.expect("prune"), 2, "closed and expired go");
+    let left: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM mcp_actions WHERE user_id = 'u7'").fetch_all(&pool).await.expect("left");
+    assert_eq!(left, ["p-open"], "an open action stays");
+    erase_pending(&pool, &["u7".to_owned()]).await.expect("erase in a transaction or on the pool");
+    assert!(store.open("u7").await.expect("open").is_empty());
 }

@@ -49,6 +49,12 @@ jobs:
           key: cargo-${{ runner.os }}-1.98.1-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-1.98.1-
 
+      - name: vectors match go tronc
+        run: |
+          sh scripts/sync-vectors.sh "$(cat tests/vectors/SOURCE)"
+          git add --intent-to-add tests/vectors
+          git diff --exit-code tests/vectors
+
       - name: gate
         run: sh scripts/check.sh
 

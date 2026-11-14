@@ -11,7 +11,13 @@ use tronc::mcp::{Caller, GONE, STATE_READY, is_changed};
 use tronc::mcptest::{self, ClientOptions, Config, ConfirmCase, Target, call, connect, decode};
 
 use app::serve;
-use notes::{DeleteOutput, Notes};
+use notes::Notes;
+
+#[derive(serde::Deserialize)]
+struct DeleteOutput {
+    confirm_url: String,
+    message: String,
+}
 
 fn token(scopes: &[&str]) -> String {
     let scopes = if scopes.is_empty() { "notes.read,notes.write".to_owned() } else { scopes.join(",") };
@@ -22,6 +28,11 @@ async fn ask_by_link(url: &str, id: &str) -> String {
     let client = connect(url, "u1|notes.read,notes.write", ClientOptions::default()).await;
     let args = serde_json::from_value(serde_json::json!({ "id": id })).expect("args");
     let out: DeleteOutput = decode(&call(&client, "notes_delete", args).await);
+    assert!(
+        out.message.starts_with("Nothing happened yet") && out.message.ends_with("open for 7 days."),
+        "{}",
+        out.message
+    );
     out.confirm_url.rsplit('=').next().expect("action id").to_owned()
 }
 

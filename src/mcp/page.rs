@@ -46,6 +46,11 @@ pub fn decode_cursor<T: DeserializeOwned>(cursor: &str) -> Result<Option<T>, Too
 /// The largest `n` in `0..=total` for which `size(n)`, the encoded size of a result holding the
 /// first `n` items, stays within [`RESULT_BUDGET`]. `size` must grow with `n`; a binary search
 /// finds `n` in `log(total)` encodings.
+///
+/// Every tool that returns a list or a long text keeps its result under the budget: a list
+/// trims to `fit_count` items and returns a cursor for the rest (see [`page`]), a long
+/// text goes through [`clip`] and says it was cut. A client truncates or rejects a result past
+/// the budget, so an unchecked list of comments or blocks fails on the largest records.
 pub fn fit_count(total: usize, size: impl Fn(usize) -> usize) -> usize {
     let (mut low, mut high) = (0, total + 1);
     while low < high {

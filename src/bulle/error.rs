@@ -10,6 +10,8 @@ pub struct PlanRequired {
     pub upgrade_url: String,
     /// The entitlement the answer names, such as `ai.access`, when it names one.
     pub key: String,
+    /// The plan's limit for that entitlement, when the answer gives one.
+    pub limit: i64,
 }
 
 /// Every way a call to Bulle fails.
@@ -34,6 +36,10 @@ pub enum Error {
     /// A path segment was empty, a dot segment, or longer than 200 bytes. Nothing was sent.
     #[error("bulle: invalid path segment")]
     BadSegment,
+    /// [`super::Client::decide_ai`] was called without the email of the user it acts for.
+    /// Nothing was sent.
+    #[error("bulle: decide_ai needs the email of the user it acts for")]
+    NoActingFor,
     /// The token source failed. Its error is passed on as it is.
     #[error(transparent)]
     Token(crate::Error),
@@ -60,10 +66,11 @@ impl Error {
 impl From<Error> for crate::Error {
     fn from(error: Error) -> Self {
         match error {
-            Error::PlanRequired(plan) => {
-                crate::Error::payment_required(or(plan.message, PLAN_FALLBACK)).with_upgrade_url(plan.upgrade_url)
-            }
+            Error::PlanRequired(plan) => crate::Error::payment_required(or(plan.message, PLAN_FALLBACK))
+                .with_upgrade_url(plan.upgrade_url)
+                .with_key(plan.key),
             Error::BadSegment => crate::Error::invalid("invalid id"),
+            Error::NoActingFor => crate::Error::internal("bulle call failed", "decide_ai without acting_for"),
             Error::Token(inner) => inner,
             Error::Status { status, message, .. } => refusal(status, or(message, REFUSED_FALLBACK)),
             Error::Unreachable(_) => unreachable(),

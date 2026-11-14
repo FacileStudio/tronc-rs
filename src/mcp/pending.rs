@@ -54,14 +54,22 @@ pub struct Action {
 /// The future a [`Pending`] method returns.
 pub type PendingFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
+/// The most waiting actions [`super::Confirmations::open`] lists for one person, as Go
+/// `mcp.OpenLimit`.
+pub const OPEN_LIMIT: usize = 100;
+
 /// Stores actions waiting for a person. `claim` must be atomic: of two claims of one open
 /// action, exactly one succeeds. That makes every confirmation single use, whether it comes from
 /// the client or from the confirm page.
 pub trait Pending: Send + Sync + 'static {
-    /// Stores a new action; `id`, `created_at` and `expires_at` are set.
-    fn create<'a>(&'a self, action: &'a Action) -> PendingFuture<'a, ()>;
+    /// Stores a new action, whose `id`, `created_at` and `expires_at` are set, and returns it.
+    /// When the person already has an open action of the same kind on the same target with the
+    /// same digest, it stores nothing and returns that one, so an agent that asks twice leaves
+    /// one entry on the confirm page.
+    fn create<'a>(&'a self, action: &'a Action) -> PendingFuture<'a, Action>;
 
-    /// Lists the person's unresolved, unexpired actions, newest first.
+    /// Lists the person's unresolved, unexpired actions, newest first. It may stop after
+    /// [`OPEN_LIMIT`] + 1 of them.
     fn open<'a>(&'a self, user_id: &'a str) -> PendingFuture<'a, Vec<Action>>;
 
     /// Marks one of the person's open actions as running and returns it, or [`gone`].
@@ -75,4 +83,8 @@ pub trait Pending: Send + Sync + 'static {
 
     /// Closes one of the person's open actions without running it, or returns [`gone`].
     fn resolve<'a>(&'a self, user_id: &'a str, id: &'a str, outcome: &'a str) -> PendingFuture<'a, ()>;
+
+    /// Deletes every action of `user_ids`, whatever its state, for an account erasure. Pending
+    /// summaries and targets hold the person's content, so they must not outlive the account.
+    fn erase<'a>(&'a self, user_ids: &'a [String]) -> PendingFuture<'a, ()>;
 }

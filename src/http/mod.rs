@@ -37,7 +37,10 @@ pub use cors::{CorsConfig, DEFAULT_ALLOWED_HEADERS, DEFAULT_ALLOWED_METHODS, DEF
 pub use csp::{Sources, build_csp};
 pub use override_policy::{SecurityOverride, SecurityOverrideConfig, security_override};
 pub use query::{SENSITIVE_QUERY_KEYS, redact_query};
-pub use rate_limit::{DEFAULT_RATE_LIMIT, KeyFn, RATE_LIMIT_EXCEEDED_BODY, RateLimitConfig, RateLimiter, rate_limit};
+pub use rate_limit::{
+    DEFAULT_RATE_LIMIT, KeyFn, RATE_LIMIT_EXCEEDED_BODY, RateLimitConfig, RateLimiter, RefuseFn, rate_limit,
+    remote_addr_key64,
+};
 pub use request_id::{MAX_REQUEST_ID_LENGTH, REQUEST_ID_HEADER, RequestId};
 pub use request_log::{Kind, classify, level_for};
 pub use security::{HSTS_VALUE, MAX_CSP_HEADER_BYTES, Security, SecurityConfig};

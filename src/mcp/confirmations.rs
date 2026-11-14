@@ -106,6 +106,9 @@ pub struct Outcome {
     pub action: Option<Action>,
     /// The link to give the person when the client could not ask. Empty otherwise.
     pub confirm_url: String,
+    /// The standard text for the model with a confirm link ([`Confirmations::waiting`]) or
+    /// after a decline ([`super::MESSAGE_DECLINED`]), as Go `Outcome.Message`. Empty otherwise.
+    pub message: String,
 }
 
 /// Asks a person before a sensitive action runs: through an MRTR `input_required` question
@@ -140,10 +143,13 @@ impl Confirmations {
         Ok(Self { cfg, signer })
     }
 
-    /// Opens a pending action of `kind` on `target` and asks the person `question`. When the
-    /// client can elicit, the first value is the `input_required` result for the tool to return
-    /// as is. Otherwise it is `None` and the outcome holds [`STATUS_PENDING`] and the confirm
-    /// link. Either way nothing has run yet.
+    /// Opens a pending action of `kind` on `target` and asks the person `question`, or reuses
+    /// the person's open action of that kind on that target with the same digest, so an agent
+    /// that loops on a tool opens one action. A reused action keeps its first client and expiry,
+    /// which the waiting text counts down from. When the client can elicit, the first value is the
+    /// `input_required` result for the tool to return as is. Otherwise it is `None` and the
+    /// outcome holds [`STATUS_PENDING`], the confirm link and [`Self::waiting`]. Either way
+    /// nothing has run yet.
     pub async fn request(
         &self,
         call: &Call,
@@ -155,17 +161,24 @@ impl Confirmations {
         let runner = self.cfg.kinds.get(kind).ok_or_else(|| Error::internal("mcp: unknown confirmation kind", kind))?;
         let mut action = self.blank(who, kind, target, question);
         action.digest = (runner.fingerprint)(action.clone()).await?;
-        self.cfg.store.create(&action).await?;
+        let action = self.cfg.store.create(&action).await?;
         self.audit(&runner.tool, "requested", who, target);
         if call.can_elicit() {
             let question = self.signer.ask(&who.user_id, &action.id, question);
             return Ok((
                 Some(question),
-                Outcome { status: STATUS_PENDING, action: Some(action), confirm_url: String::new() },
+                Outcome {
+                    status: STATUS_PENDING,
+                    action: Some(action),
+                    confirm_url: String::new(),
+                    message: String::new(),
+                },
             ));
         }
         let confirm_url = self.link(&action.id);
-        Ok((None, Outcome { status: STATUS_PENDING, action: Some(action), confirm_url }))
+        let left = (action.expires_at - time::OffsetDateTime::now_utc()).whole_seconds().max(0) as u64;
+        let message = super::ask::waiting(Duration::from_secs((left + 1800) / 3600 * 3600));
+        Ok((None, Outcome { status: STATUS_PENDING, action: Some(action), confirm_url, message }))
     }
 
     /// Handles the retry that carries the person's answer to a question about `kind`: a decline
@@ -177,16 +190,17 @@ impl Confirmations {
             self.cfg.store.resolve(&who.user_id, &id, OUTCOME_DECLINED).await?;
             let tool = self.cfg.kinds.get(kind).map_or("", |k| k.tool.as_str());
             self.audit(tool, OUTCOME_DECLINED, who, "");
-            return Ok(Outcome { status: STATUS_DECLINED, action: None, confirm_url: String::new() });
+            let message = super::MESSAGE_DECLINED.to_owned();
+            return Ok(Outcome { status: STATUS_DECLINED, action: None, confirm_url: String::new(), message });
         }
         let action = self.run(who, &id, Some(kind)).await?;
-        Ok(Outcome { status: STATUS_DONE, action: Some(action), confirm_url: String::new() })
+        Ok(Outcome { status: STATUS_DONE, action: Some(action), confirm_url: String::new(), message: String::new() })
     }
 
     /// Runs one of `who`'s actions from the confirm page. The page must refuse a delegated token
     /// first: an agent never confirms its own request.
     pub async fn confirm(&self, who: &Caller, id: &str) -> Result<Outcome> {
         let action = self.run(who, id, None).await?;
-        Ok(Outcome { status: STATUS_DONE, action: Some(action), confirm_url: String::new() })
+        Ok(Outcome { status: STATUS_DONE, action: Some(action), confirm_url: String::new(), message: String::new() })
     }
 }

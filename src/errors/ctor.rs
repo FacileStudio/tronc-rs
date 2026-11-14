@@ -41,7 +41,7 @@ constructors! {
 impl Error {
     /// Builds an error from a code and a message, with no cause.
     pub fn new(code: Code, message: impl Into<String>) -> Self {
-        Self { code, message: message.into(), upgrade_url: None, cause: None }
+        Self { code, message: message.into(), upgrade_url: None, key: None, cause: None }
     }
 
     /// A server-side fault. The cause is logged, never sent. HTTP 500.
@@ -54,6 +54,14 @@ impl Error {
     pub fn with_upgrade_url(mut self, raw: impl Into<String>) -> Self {
         let raw = raw.into();
         self.upgrade_url = safe_upgrade_url(&raw).then_some(raw);
+        self
+    }
+
+    /// Names the entitlement a plan refusal is about, such as `ai.access`. An empty key leaves
+    /// the field unset.
+    pub fn with_key(mut self, key: impl Into<String>) -> Self {
+        let key = key.into();
+        self.key = (!key.is_empty()).then_some(key);
         self
     }
 }

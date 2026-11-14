@@ -86,6 +86,9 @@ pub struct Error {
     pub message: String,
     /// Where the caller can upgrade, sent only when [`safe_upgrade_url`] accepts it.
     pub upgrade_url: Option<String>,
+    /// The entitlement a plan refusal names, such as `ai.access`, sent as `key` when set. muse's
+    /// `planLimitFrom` reads it.
+    pub key: Option<String>,
     /// The underlying failure, kept out of the payload.
     #[source]
     pub cause: Option<Cause>,

@@ -1,7 +1,7 @@
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
 
-use super::pending::{Action, OUTCOME_RUNNING, gone};
+use super::pending::{Action, OPEN_LIMIT, OUTCOME_RUNNING, gone};
 use crate::errors::{Error, Result};
 
 const COLUMNS: &str = "id, user_id, kind, target, digest, summary, client_id, created_at, expires_at";
@@ -38,15 +38,22 @@ pub(super) async fn claim(pool: &PgPool, user_id: &str, id: &str) -> Result<Acti
 pub(super) async fn open(pool: &PgPool, user_id: &str) -> Result<Vec<Action>> {
     let sql = format!(
         "SELECT {COLUMNS} FROM mcp_actions WHERE user_id = $1 AND resolved_at IS NULL AND expires_at > now() \
-         ORDER BY created_at DESC, id"
+         ORDER BY created_at DESC, id LIMIT $2"
     );
-    let rows = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(user_id).fetch_all(pool).await.map_err(failed("list"))?;
+    let query = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(user_id).bind(OPEN_LIMIT as i64 + 1);
+    let rows = query.fetch_all(pool).await.map_err(failed("list"))?;
     rows.iter().map(scan).collect::<std::result::Result<_, _>>().map_err(failed("list"))
 }
 
-pub(super) async fn create(pool: &PgPool, a: &Action) -> Result<()> {
-    let sql = format!("INSERT INTO mcp_actions ({COLUMNS}) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)");
-    sqlx::query(sqlx::AssertSqlSafe(sql))
+pub(super) async fn create(pool: &PgPool, a: &Action) -> Result<Action> {
+    let sql = format!(
+        "WITH found AS (SELECT {COLUMNS} FROM mcp_actions WHERE user_id = $2 AND kind = $3 AND target = $4 \
+         AND digest = $5 AND resolved_at IS NULL AND expires_at > now() ORDER BY created_at DESC, id LIMIT 1), \
+         made AS (INSERT INTO mcp_actions ({COLUMNS}) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9 \
+         WHERE NOT EXISTS (SELECT 1 FROM found) RETURNING {COLUMNS}) \
+         SELECT {COLUMNS} FROM found UNION ALL SELECT {COLUMNS} FROM made"
+    );
+    let row = sqlx::query(sqlx::AssertSqlSafe(sql))
         .bind(&a.id)
         .bind(&a.user_id)
         .bind(&a.kind)
@@ -56,10 +63,10 @@ pub(super) async fn create(pool: &PgPool, a: &Action) -> Result<()> {
         .bind(&a.client_id)
         .bind(a.created_at)
         .bind(a.expires_at)
-        .execute(pool)
+        .fetch_one(pool)
         .await
-        .map(drop)
-        .map_err(failed("create"))
+        .map_err(failed("create"))?;
+    scan(&row).map_err(failed("create"))
 }
 
 pub(super) async fn resolve(pool: &PgPool, user_id: &str, id: &str, outcome: &str) -> Result<()> {

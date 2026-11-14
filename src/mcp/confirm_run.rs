@@ -17,11 +17,6 @@ impl Confirmations {
         Ok(())
     }
 
-    /// Lists the person's waiting actions, newest first.
-    pub async fn open(&self, user_id: &str) -> Result<Vec<Action>> {
-        self.cfg.store.open(user_id).await
-    }
-
     pub(super) fn audit(&self, tool: &str, outcome: &str, caller: &Caller, target: &str) {
         audit(Event { tool, outcome, caller, target });
     }

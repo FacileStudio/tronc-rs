@@ -15,7 +15,8 @@ pub const MAX_ANSWER_BYTES: usize = 1 << 20;
 
 const MAX_SEGMENT_BYTES: usize = 200;
 
-/// Calls Bulle's API as a user. Cheap to clone and safe to share.
+/// Calls Bulle's API as a user. Cheap to clone and safe to share: build one at boot and clone
+/// it, so every call reuses its connection pool.
 #[derive(Debug, Clone)]
 pub struct Client {
     base: Url,
@@ -24,16 +25,24 @@ pub struct Client {
 
 impl Client {
     /// A client for Bulle at `url`, such as `https://bulle.facile.studio`, with a
-    /// [`DEFAULT_TIMEOUT`] HTTP client.
+    /// [`DEFAULT_TIMEOUT`] HTTP client that never follows a redirect.
     pub fn new(url: &str) -> Result<Self, String> {
+        Self::with_timeout(url, DEFAULT_TIMEOUT)
+    }
+
+    /// [`Self::new`] with another timeout, such as a longer one for completions.
+    pub fn with_timeout(url: &str, timeout: Duration) -> Result<Self, String> {
         let http = reqwest::Client::builder()
-            .timeout(DEFAULT_TIMEOUT)
+            .timeout(timeout)
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|e| format!("bulle: building the HTTP client: {e}"))?;
         Self::with_http(url, http)
     }
 
-    /// A client for Bulle at `url` that sends through `http`, which owns the timeouts.
+    /// A client for Bulle at `url` that sends through `http`, which owns the timeouts and the
+    /// redirect policy. A redirect is answered as an error unless `http` follows it, so a token
+    /// never reaches another host.
     pub fn with_http(url: &str, http: reqwest::Client) -> Result<Self, String> {
         let invalid = || "bulle: URL must be an absolute http or https origin".to_owned();
         let base = Url::parse(url.trim_end_matches('/')).map_err(|_| invalid())?;
@@ -116,6 +125,9 @@ impl Client {
             .request(request.method.clone(), target)
             .bearer_auth(token)
             .header(header::ACCEPT, "application/json");
+        for (name, value) in &request.headers {
+            builder = builder.header(name.as_str(), value.as_str());
+        }
         if let Some(body) = &request.body {
             builder = builder.header(header::CONTENT_TYPE, "application/json").body(body.to_string());
         }
