@@ -27,11 +27,27 @@ pub trait PlanLimit {
     fn plan_limit(&self) -> (String, String);
 }
 
-/// The model's text for a [`PlanLimit`]: the feature, then the upgrade page when it is safe to
-/// show, as Go `Failure` reads one.
+const FEATURE_LABELS: &[(&str, &str)] = &[
+    ("ai.access", "AI"),
+    ("courrier.mailboxes", "mailboxes"),
+    ("echo.max_call_minutes", "call length"),
+    ("echo.max_participants", "participants"),
+    ("echo.recording", "recording"),
+    ("nuage.storage_gb", "storage"),
+    ("sonar.searches_daily", "daily searches"),
+];
+
+fn feature_label(key: &str) -> &str {
+    FEATURE_LABELS.iter().find(|(known, _)| *known == key).map_or(key, |(_, label)| label)
+}
+
+/// The model's text for a [`PlanLimit`]: it says nothing was done, names the feature the way a
+/// person reads it (an unknown key stays raw), then the upgrade page when it is safe to show, as
+/// Go `Failure` reads one.
 pub fn plan_failure(limit: &dyn PlanLimit) -> ToolError {
     let (feature, link) = limit.plan_limit();
-    ToolError(upgrade(&format!("the plan limit for {feature} is reached"), Some(&link)))
+    let message = format!("nothing was done: the plan limit for {} is reached", feature_label(&feature));
+    ToolError(upgrade(&message, Some(&link)))
 }
 
 /// Turns a service error into one a model can act on. A bad argument or a missing precondition
