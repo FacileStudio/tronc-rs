@@ -268,9 +268,11 @@ impl Client {
 pub struct CompleteRequest { pub system, pub prompt, pub input: String, pub schema: Option<Value>,
     pub max_tokens: u32, pub space_id: String }  // empty fields are not sent
 pub struct Completion { pub text: String, pub json: Option<Value>, pub model: String }
-pub enum Error { PlanRequired(PlanRequired), Status { status: u16, code: String, message: String },
+pub enum Error { PlanRequired(PlanRequired),
+    Status { status: u16, code: String, message: String, retry_after: Duration },
     Unreachable(String), BadSegment, Token(tronc::Error) }
-impl Error { pub fn status(&self) -> Option<u16>; pub fn is_unreachable(&self) -> bool; }
+impl Error { pub fn status(&self) -> Option<u16>; pub fn is_unreachable(&self) -> bool;
+    pub fn retry_after(&self) -> Duration; }  // Retry-After on a 429 or 503, capped at a day
 impl From<Error> for tronc::Error;
 pub struct PlanRequired { pub message: String, pub upgrade_url: String, pub key: String }
 pub struct Idea; IdeaList; Source; Batch; RunStart; Run; Output; Approval;   // Bulle's JSON, serde
@@ -289,9 +291,10 @@ pub fn mount_ideas<S>(router: Router<S>, options: IdeasOptions) -> Result<Router
 |---|---|---|
 | 2xx | `Ok`, an empty body decodes as `null` | |
 | 402, bare or in the envelope | `PlanRequired`, unsafe `upgrade_url` dropped | 402 `payment_required` with `upgrade_url` |
-| 400, 403, 404, 409, 429 | `Status` | the same status and code |
+| 400, 403, 404, 409, 429 | `Status`, a 429 with its `Retry-After` wait | the same status and code |
 | 401 or any other 4xx | `Status` | 503 `unavailable`: Bulle's 401 is about the app's token, not the session |
-| 5xx, timeout, network, unreadable body | `Unreachable` | 503 `unavailable` |
+| 503 with a `Retry-After` | `Status` with the wait, `is_unreachable()` true | 503 `unavailable` |
+| any other 5xx, timeout, network, unreadable body | `Unreachable` | 503 `unavailable` |
 | an empty, dot or 201-byte segment | `BadSegment`, nothing sent | 400 `invalid_argument` |
 | the token source failed | `Token(e)` | `e` as it is |
 
@@ -405,7 +408,7 @@ pub struct ConfirmConfig { pub store: Arc<dyn Pending>, pub key: Vec<u8>, pub co
 pub struct Kind { pub tool, pub fingerprint, pub run }   // Kind::new(tool, async fingerprint, async run)
 pub struct Outcome { pub status: &'static str, pub action: Option<Action>, pub confirm_url: String,
     pub message: String }                         // waiting() with a link, MESSAGE_DECLINED after a decline
-pub trait Pending { create /* reuses an open duplicate */, open /* may stop at 101 */, claim, finish,
+pub trait Pending { create /* reuses an open duplicate: same user, kind, target, digest and client_id */, open /* may stop at 101 */, claim, finish,
     release, resolve, erase(user_ids) }           // claim is atomic
 pub struct Confirmation { pub status: String, pub confirm_url: String, pub message: String }
 pub const MESSAGE_DECLINED: &str = "The user declined. Nothing happened.";

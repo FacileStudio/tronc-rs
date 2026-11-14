@@ -7,8 +7,10 @@
 //! (audience `bulle`, scopes `bulle.read` and `bulle.write`); tronc never depends on porte.
 //!
 //! Failures come back typed: a 402 is [`Error::PlanRequired`], any other 4xx an
-//! [`Error::Status`] that keeps its status (429 is the daily cap, 409 a batch already running),
-//! and a 5xx, a timeout or a network error is [`Error::Unreachable`]. Paths are built from
+//! [`Error::Status`] that keeps its status (429 is the daily cap, 409 a batch already running)
+//! and the `Retry-After` wait, and a 5xx, a timeout or a network error is [`Error::Unreachable`].
+//! A 503 that names a `Retry-After` is an [`Error::Status`] for which
+//! [`Error::is_unreachable`] still holds. Paths are built from
 //! escaped segments, so nothing a browser sends becomes a path as it is. [`mount_ideas`] serves
 //! the `/ideas*` routes to the app's own frontend.
 

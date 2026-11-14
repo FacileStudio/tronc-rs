@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 const PLAN_FALLBACK: &str = "This needs a plan with AI access.";
 const REFUSED_FALLBACK: &str = "Bulle refused the request.";
 
@@ -20,7 +22,8 @@ pub enum Error {
     /// Bulle answered 402.
     #[error("bulle: plan required: {}", .0.message)]
     PlanRequired(PlanRequired),
-    /// Bulle answered any other 4xx. 429 is the daily cap, 409 a batch already running.
+    /// Bulle answered any other 4xx, or a 503 that names a `Retry-After`. 429 is the daily cap,
+    /// 409 a batch already running.
     #[error("bulle: answered {status} {code}: {message}")]
     Status {
         /// The HTTP status.
@@ -29,6 +32,9 @@ pub enum Error {
         code: String,
         /// Bulle's error message.
         message: String,
+        /// The wait the `Retry-After` header asks for on a 429 or a 503, delay seconds or an
+        /// HTTP date, capped at a day. Zero when it names none, an unreadable value or a past date.
+        retry_after: Duration,
     },
     /// No answer from Bulle: a network error, a timeout, a 5xx or an unreadable body.
     #[error("bulle: unreachable: {0}")]
@@ -46,7 +52,7 @@ pub enum Error {
 }
 
 impl Error {
-    /// The HTTP status of a 4xx answer, 402 included.
+    /// The HTTP status of a 4xx answer, 402 included, or of a 503 that names a `Retry-After`.
     pub fn status(&self) -> Option<u16> {
         match self {
             Self::PlanRequired(_) => Some(402),
@@ -55,9 +61,17 @@ impl Error {
         }
     }
 
-    /// Reports whether Bulle gave no usable answer.
+    /// Reports whether Bulle gave no usable answer. A 503 that names a `Retry-After` counts.
     pub fn is_unreachable(&self) -> bool {
-        matches!(self, Self::Unreachable(_))
+        matches!(self, Self::Unreachable(_) | Self::Status { status: 500.., .. })
+    }
+
+    /// The wait Bulle's `Retry-After` header asked for, zero when it named none.
+    pub fn retry_after(&self) -> Duration {
+        match self {
+            Self::Status { retry_after, .. } => *retry_after,
+            _ => Duration::ZERO,
+        }
     }
 }
 

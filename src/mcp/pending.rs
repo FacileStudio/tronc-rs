@@ -64,8 +64,9 @@ pub const OPEN_LIMIT: usize = 100;
 pub trait Pending: Send + Sync + 'static {
     /// Stores a new action, whose `id`, `created_at` and `expires_at` are set, and returns it.
     /// When the person already has an open action of the same kind on the same target with the
-    /// same digest, it stores nothing and returns that one, so an agent that asks twice leaves
-    /// one entry on the confirm page.
+    /// same digest, asked by the same OAuth client, it stores nothing and returns that one, so an
+    /// agent that asks twice leaves one entry on the confirm page. Another client of the same
+    /// person gets its own action, so consent given through one client never reaches another.
     fn create<'a>(&'a self, action: &'a Action) -> PendingFuture<'a, Action>;
 
     /// Lists the person's unresolved, unexpired actions, newest first. It may stop after

@@ -6,6 +6,30 @@ All notable changes to `tronc-rs` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-14
+
+Ports Go tronc v0.23.1. Vectors synced to `v0.23.1`.
+
+### Security
+
+- **`mcp` request dedupe matches the OAuth client.** `Pending::create` reuses an open action
+  only when the user, kind, target, digest and `client_id` all match, in `PostgresPending` and
+  `mcptest::MemoryPending`. Before, a second client of the same person reused the first
+  client's action, so consent given to client B could let client A collect the result. Each
+  client now opens its own action (Go `reuseOrCreate`). A custom `Pending` store must add the
+  same condition.
+
+### Added
+
+- **`bulle::Error::Status::retry_after`** and `Error::retry_after()`: the wait Bulle's
+  `Retry-After` header names, delay seconds or an HTTP date, on a 429 or a 503, capped at a
+  day; zero when it names none, an unreadable value or a past date (Go
+  `StatusError.RetryAfter`). A 503 with a `Retry-After` now comes back as `Error::Status`, and
+  `is_unreachable()` still holds for it; a 503 without one stays `Error::Unreachable`. The
+  frontend mapping is unchanged (503 `unavailable`). A pattern that names every field of
+  `Error::Status` without `..` needs the new field. Vector `bulle_errors.json` gains four
+  cases and `retry_after_seconds`.
+
 ## [0.5.0] - 2026-11-14
 
 Catches up with Go tronc v0.22 and v0.23.0, so Toile and Docs can drop their own confirm page,

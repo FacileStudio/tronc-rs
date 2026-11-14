@@ -144,9 +144,10 @@ impl Confirmations {
     }
 
     /// Opens a pending action of `kind` on `target` and asks the person `question`, or reuses
-    /// the person's open action of that kind on that target with the same digest, so an agent
-    /// that loops on a tool opens one action. A reused action keeps its first client and expiry,
-    /// which the waiting text counts down from. When the client can elicit, the first value is the
+    /// the person's open action of that kind on that target with the same digest, asked by the
+    /// same OAuth client, so an agent that loops on a tool opens one action. Another client of
+    /// the same person opens its own action. A reused action keeps its first expiry, which the
+    /// waiting text counts down from. When the client can elicit, the first value is the
     /// `input_required` result for the tool to return as is. Otherwise it is `None` and the
     /// outcome holds [`STATUS_PENDING`], the confirm link and [`Self::waiting`]. Either way
     /// nothing has run yet.
