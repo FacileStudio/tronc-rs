@@ -9,8 +9,8 @@ impl Pending for MemoryPending {
         let stored = self.with(|rows| {
             let same = |r: &&Row| {
                 r.open(&action.user_id, now)
-                    && (&r.action.kind, &r.action.target, &r.action.digest)
-                        == (&action.kind, &action.target, &action.digest)
+                    && (&r.action.kind, &r.action.target, &r.action.digest, &r.action.client_id)
+                        == (&action.kind, &action.target, &action.digest, &action.client_id)
             };
             if let Some(found) =
                 newest(rows.values().filter(same).map(|r| r.action.clone()).collect()).into_iter().next()

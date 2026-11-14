@@ -2500,7 +2500,7 @@ dependencies = [
 
 [[package]]
 name = "tronc"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -2510,6 +2510,7 @@ dependencies = [
  "hmac",
  "http",
  "http-body-util",
+ "httpdate",
  "ipnet",
  "percent-encoding",
  "reqwest",

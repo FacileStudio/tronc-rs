@@ -48,7 +48,8 @@ pub(super) async fn open(pool: &PgPool, user_id: &str) -> Result<Vec<Action>> {
 pub(super) async fn create(pool: &PgPool, a: &Action) -> Result<Action> {
     let sql = format!(
         "WITH found AS (SELECT {COLUMNS} FROM mcp_actions WHERE user_id = $2 AND kind = $3 AND target = $4 \
-         AND digest = $5 AND resolved_at IS NULL AND expires_at > now() ORDER BY created_at DESC, id LIMIT 1), \
+         AND digest = $5 AND client_id = $7 AND resolved_at IS NULL AND expires_at > now() \
+         ORDER BY created_at DESC, id LIMIT 1), \
          made AS (INSERT INTO mcp_actions ({COLUMNS}) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9 \
          WHERE NOT EXISTS (SELECT 1 FROM found) RETURNING {COLUMNS}) \
          SELECT {COLUMNS} FROM found UNION ALL SELECT {COLUMNS} FROM made"

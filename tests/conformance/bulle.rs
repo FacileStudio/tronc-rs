@@ -32,10 +32,13 @@ fn classify(result: Result<(), Error>) -> Value {
             }
             want
         }
-        Err(Error::Status { status, code, message }) => {
+        Err(Error::Status { status, code, message, retry_after }) => {
             let mut want = json!({"kind": "status", "status": status});
             for (name, value) in [("code", code), ("message", message)].into_iter().filter(|(_, v)| !v.is_empty()) {
                 want[name] = value.into();
+            }
+            if !retry_after.is_zero() {
+                want["retry_after_seconds"] = retry_after.as_secs().into();
             }
             want
         }
@@ -45,15 +48,19 @@ fn classify(result: Result<(), Error>) -> Value {
 }
 
 pub async fn errors_case(case: &Case) -> Result<(), String> {
-    let (status, body, location) = (
+    let (status, body, location, retry_after) = (
         case.input["status"].as_u64().unwrap_or(500) as u16,
         text(&case.input, "body").to_owned(),
         text(&case.input, "location").to_owned(),
+        text(&case.input, "retry_after").to_owned(),
     );
     let answer = move || {
         let mut response = Response::builder().status(status).header("content-type", "application/json");
         if !location.is_empty() {
             response = response.header("location", location.clone());
+        }
+        if !retry_after.is_empty() {
+            response = response.header("retry-after", retry_after.clone());
         }
         let response = response.body(Body::from(body.clone())).expect("response");
         async move { response }

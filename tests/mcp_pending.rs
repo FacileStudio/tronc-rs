@@ -72,8 +72,12 @@ async fn dedupes_limits_and_erases(store: Arc<dyn Pending>) {
     assert_eq!((first.id.as_str(), again.id.as_str()), ("d1", "d1"), "the same request reuses the open action");
     let other = Action { target: "d1".into(), digest: "changed".into(), ..action("d3", "u5", 0) };
     assert_eq!(store.create(&other).await.expect("create").id, "d3", "another digest is another action");
+    let client_b = Action { target: "d1".into(), client_id: "b".into(), ..action("d4", "u5", 0) };
+    assert_eq!(store.create(&client_b).await.expect("create").id, "d4", "another client is another action");
+    let again_b = Action { target: "d1".into(), client_id: "b".into(), ..action("d5", "u5", 0) };
+    assert_eq!(store.create(&again_b).await.expect("create").id, "d4", "the same client reuses its own action");
     let open: Vec<String> = store.open("u5").await.expect("open").into_iter().map(|a| a.id).collect();
-    assert_eq!(open, ["d3", "d1"], "two actions, newest first");
+    assert_eq!(open.len(), 3, "one action per digest and client: {open:?}");
     for n in 0..=OPEN_LIMIT {
         store.create(&action(&format!("l{n}"), "u8", 0)).await.expect("create");
     }

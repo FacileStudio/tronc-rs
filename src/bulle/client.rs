@@ -1,11 +1,11 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use reqwest::{Url, header};
 use serde::de::DeserializeOwned;
 
 use super::error::Error;
 use super::request::{Request, TokenSource};
-use super::wire::{answer, decode, unreachable};
+use super::wire::{answer, decode, retry_after, unreachable};
 
 /// How long the default HTTP client waits for Bulle, as Go `tronc/bulle`.
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(20);
@@ -133,6 +133,7 @@ impl Client {
         }
         let mut response = builder.send().await.map_err(unreachable)?;
         let status = response.status();
+        let wait = retry_after(response.headers(), SystemTime::now());
         let mut raw = Vec::new();
         while raw.len() < MAX_ANSWER_BYTES {
             match response.chunk().await.map_err(unreachable)? {
@@ -141,6 +142,6 @@ impl Client {
             }
         }
         raw.truncate(MAX_ANSWER_BYTES);
-        answer(status, raw)
+        answer(status, wait, raw)
     }
 }
