@@ -368,7 +368,8 @@ pub struct ToolSpec { pub name: String, pub title: String, pub description: Stri
     pub annotations: Option<Annotations> }      // None is refused at boot
 pub struct Annotations { pub read_only: bool, pub destructive: bool, pub idempotent: bool, pub open_world: bool }
 // presets: READ, ADD, SET, OVERWRITE, REMOVE; .open_world(). Overwriting or removing user data,
-// or silencing an alert, is destructive; only a repeat with no further effect is idempotent.
+// or silencing an alert, is destructive; only a repeat with no further effect is idempotent, so a
+// tool that asks for a confirmation (REMOVE), sends or creates on each call is not.
 pub fn tool<In, Out, F, Fut>(spec: ToolSpec, handler: F) -> Tool
     where In: DeserializeOwned + JsonSchema, Out: Serialize + JsonSchema,
           F: Fn(Call, In) -> Fut, Fut: Future<Output = Result<Answer<Out>, ToolError>> + Send;

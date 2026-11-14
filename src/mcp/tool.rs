@@ -18,7 +18,8 @@ use super::failure::ToolError;
 ///
 /// The suite rule: any tool that overwrites or removes user data, or silences an alert, is
 /// `destructive`, a rename included. Only a tool whose repeat call with the same arguments has
-/// no further effect is `idempotent`. Start from a preset: [`Self::READ`], [`Self::ADD`],
+/// no further effect is `idempotent`; a tool that asks for a confirmation, sends, or creates on
+/// each call is not. Start from a preset: [`Self::READ`], [`Self::ADD`],
 /// [`Self::SET`], [`Self::OVERWRITE`] or [`Self::REMOVE`], plus [`Self::open_world`] for content
 /// from outside the app.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -43,8 +44,9 @@ impl Annotations {
     pub const SET: Self = Self { read_only: false, destructive: false, idempotent: true, open_world: false };
     /// Replaces user data with the given value, such as a rename or an edit.
     pub const OVERWRITE: Self = Self { read_only: false, destructive: true, idempotent: true, open_world: false };
-    /// Deletes, trashes or silences, such as deleting a board or muting an alert.
-    pub const REMOVE: Self = Self { read_only: false, destructive: true, idempotent: true, open_world: false };
+    /// Deletes, trashes or silences after asking for a confirmation, such as deleting a board or
+    /// muting an alert. Asking makes it not idempotent.
+    pub const REMOVE: Self = Self { read_only: false, destructive: true, idempotent: false, open_world: false };
 
     /// The same hints for a tool that reads or reaches content from outside the app.
     pub const fn open_world(self) -> Self {

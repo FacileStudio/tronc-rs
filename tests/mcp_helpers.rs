@@ -103,7 +103,11 @@ fn presets_follow_the_annotations_rule() {
     assert_eq!(hints(Annotations::READ), (true, false, true));
     assert_eq!(hints(Annotations::ADD), (false, false, false));
     assert_eq!(hints(Annotations::SET), (false, false, true));
-    assert_eq!((hints(Annotations::OVERWRITE), hints(Annotations::REMOVE)), ((false, true, true), (false, true, true)));
+    assert_eq!(
+        (hints(Annotations::OVERWRITE), hints(Annotations::REMOVE)),
+        ((false, true, true), (false, true, false))
+    );
     assert!(Annotations::READ.open_world().open_world && Annotations::READ.open_world().read_only);
     assert_eq!(failure(Error::failed("échec du calcul"), "").0, "Échec du calcul", "the first letter, not byte");
+    assert_eq!(failure(Error::failed("ßig"), "").0, "ßig", "one letter stays one letter, as Go ToUpper");
 }

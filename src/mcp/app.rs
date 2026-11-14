@@ -127,6 +127,7 @@ impl App {
 fn origin(resource: &str) -> Option<String> {
     let uri: http::Uri = resource.parse().ok()?;
     let scheme = uri.scheme_str().filter(|s| !s.is_empty())?;
-    let authority = uri.authority().map(|a| a.as_str()).filter(|a| !a.is_empty())?;
-    Some(format!("{scheme}://{authority}"))
+    let authority = uri.authority()?.as_str();
+    let host = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
+    (!host.is_empty()).then(|| format!("{scheme}://{host}"))
 }

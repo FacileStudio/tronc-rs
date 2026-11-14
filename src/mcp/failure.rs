@@ -57,7 +57,13 @@ pub fn failure(error: Error, hint: &str) -> ToolError {
 
 fn sentence(message: &str) -> String {
     let mut chars = message.chars();
-    chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
+    let Some(first) = chars.next() else { return String::new() };
+    let mut upper = first.to_uppercase();
+    let first = match (upper.next(), upper.next()) {
+        (Some(single), None) => single,
+        _ => first,
+    };
+    std::iter::once(first).chain(chars).collect()
 }
 
 fn upgrade(message: &str, url: Option<&str>) -> String {

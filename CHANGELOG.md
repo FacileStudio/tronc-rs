@@ -6,7 +6,7 @@ All notable changes to `tronc-rs` are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-11-13
+## [0.5.0] - 2026-11-14
 
 Catches up with Go tronc v0.22 and v0.23.0, so Toile and Docs can drop their own confirm page,
 MCP wiring, erase query and Bulle plumbing. Go equivalents are named in each entry.
@@ -42,7 +42,8 @@ MCP wiring, erase query and Bulle plumbing. Go equivalents are named in each ent
   `Cursor`), with `fit_count` guidance for results near `RESULT_BUDGET`.
 - **Annotation presets** `Annotations::READ`, `ADD`, `SET`, `OVERWRITE` and `REMOVE`, encoding
   the suite rule: overwriting or removing user data, or silencing an alert, is destructive;
-  only a repeat with no further effect is idempotent.
+  only a repeat with no further effect is idempotent, so `REMOVE`, which asks for a
+  confirmation, is not.
 - **`failure` parity with Go v0.23.0:** an `unavailable` error keeps its message, an unsafe
   upgrade link is dropped, and `PlanLimit` plus `plan_failure` turn an outside plan refusal
   (porte's forfait limit) into "The plan limit for X is reached. Upgrade at ...".
@@ -62,8 +63,17 @@ MCP wiring, erase query and Bulle plumbing. Go equivalents are named in each ent
 
 - **Breaking:** `Pending::create` returns the stored `Action` and reuses an open duplicate,
   `Pending::open` may stop after 101 actions, and the trait gains `erase`. `Outcome` gains
-  `message`. `state_key` takes the secret as `&str`.
+  `message`.
 - **Breaking:** `tronc::Error` gains a `key` field; build errors with the constructors.
+- **Breaking:** `bulle::Error` gains the `NoActingFor` variant, so an exhaustive `match` needs a
+  new arm.
+- **Breaking:** `bulle::PlanRequired` gains `limit` (end a literal with `..Default::default()`)
+  and `bulle::Request` gains `headers` (build it with `Request::new`).
+- **Breaking:** `http::RateLimitConfig` gains `max_keys` and `on_refuse`; end a literal with
+  `..RateLimitConfig::default()`.
+- `Confirmations::open` returns at most 100 actions (`OPEN_LIMIT`), where it returned all.
+- The MCP rate limiter keeps at most 10,000 keys and keys a caller without a user on its IPv6
+  /64, where it kept every key and used the full address.
 - `bulle::Client::new` never follows a redirect, so a user's token never reaches another host.
   Build one client at boot and clone it to reuse its connection pool.
 - CI re-syncs the conformance vectors from the Go tag in `tests/vectors/SOURCE` (v0.23.0) and
