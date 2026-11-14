@@ -6,6 +6,18 @@ All notable changes to `tronc-rs` are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-14
+
+Ports Go tronc v0.23.2. Vectors synced to `v0.23.2`.
+
+### Changed
+
+- **`plan_failure` says nothing was done and names the feature readably.** The text is now
+  "Nothing was done: the plan limit for <label> is reached. Upgrade at <url>". A built-in table
+  maps the suite forfait keys (`nuage.storage_gb` to storage, `sonar.searches_daily` to daily
+  searches, and so on) and an unknown key stays raw. Add a new app limit key to the table
+  (Go `featureLabels`), or the model sees the internal key.
+
 ## [0.5.1] - 2026-11-14
 
 Ports Go tronc v0.23.1. Vectors synced to `v0.23.1`.
